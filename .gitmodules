@@ -1,0 +1,3 @@
+[submodule "catkin_ws/src/uuv_control"]
+	path = catkin_ws/src/uuv_control
+	url = git@github.com:usc-robosub/uuv_control.git
