@@ -17,14 +17,14 @@ def publish_wrench():
     wrench_msg = Wrench()
 
     # Apply force along the x-axis to move forward
-    wrench_msg.force.x = 200.0  # Adjust the value as needed
+    wrench_msg.force.x = 0.0  # Adjust the value as needed
     wrench_msg.force.y = 0.0
     wrench_msg.force.z = 0.0
 
     # No torque applied
-    wrench_msg.torque.x = 0.0
+    wrench_msg.torque.x = 0.0  # Adjust the value as needed
     wrench_msg.torque.y = 0.0
-    wrench_msg.torque.z = 0.0
+    wrench_msg.torque.z = 20.0
 
     rospy.loginfo("Publishing Wrench message to move forward")
 

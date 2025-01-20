@@ -4,3 +4,15 @@
 [submodule "catkin_ws/src/uuv_assistants"]
 	path = catkin_ws/src/uuv_assistants
 	url = git@github.com:usc-robosub/uuv_assistants.git
+[submodule "catkin_ws/src/kindr"]
+	path = catkin_ws/src/kindr
+	url = https://github.com/ANYbotics/kindr.git
+[submodule "catkin_ws/src/control-toolbox"]
+	path = catkin_ws/src/control-toolbox
+	url = https://github.com/ethz-adrl/control-toolbox.git
+[submodule "dependencies/blasfeo"]
+	path = dependencies/blasfeo
+	url = https://github.com/giaf/blasfeo
+[submodule "dependencies/hpipm"]
+	path = dependencies/hpipm
+	url = https://github.com/giaf/hpipm
