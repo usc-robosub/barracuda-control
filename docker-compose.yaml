@@ -1,0 +1,10 @@
+services:
+  barracuda-control:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: barracuda-control
+    tty: true
+    network_mode: host
+    volumes:
+      - $HOME/.ssh:/root/.ssh
