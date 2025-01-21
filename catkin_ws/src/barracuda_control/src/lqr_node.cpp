@@ -3,6 +3,7 @@
 #include <geometry_msgs/Wrench.h>
 #include <nav_msgs/Odometry.h>
 #include <geometry_msgs/AccelWithCovarianceStamped.h>
+#include <geometry_msgs/Twist.h>
 #include <ros/ros.h>
 
 #define STATE_DIM 15
@@ -17,9 +18,10 @@ public:
     LqrNode(ros::NodeHandle& nh)
         : nh_(nh)
     {
+        ROS_INFO("LQR Node initialized and running.");
         int rate;
         double dt;
-        nh.getParam("lqr/publish_rate", rate);
+        nh.getParam("lqr/update_rate", rate);
 
         dt = 1.0 / rate;
 
@@ -28,11 +30,9 @@ public:
         Eigen::MatrixXd I3 = Eigen::MatrixXd::Identity(3, 3);
         Eigen::MatrixXd I6 = Eigen::MatrixXd::Identity(6, 6);
 
-        ct::core::FeedbackMatrix<STATE_DIM, CONTROL_DIM> K_;
-        Eigen::MatrixXd A_mat;
-        Eigen::MatrixXd B_mat;
-        Eigen::MatrixXd Q_mat;
-        Eigen::MatrixXd R_mat;
+        A_mat = Eigen::MatrixXd::Zero(STATE_DIM, STATE_DIM);
+        B_mat = Eigen::MatrixXd::Zero(STATE_DIM, CONTROL_DIM);
+
         // Fill A_d based on the discrete-time formula
         A_mat.block(0, 0, 6, 6) = I6;                    // Position and orientation update
         A_mat.block(0, 6, 6, 6) = dt * I6;           // Velocity contribution
@@ -41,9 +41,7 @@ public:
         A_mat.block(6, 6, 6, 6) = I6;                     // Velocity update
         A_mat.block(6, 12, 3, 3) = dt * I3;           // Acceleration contribution (only linear)
 
-        A_mat.block(12, 12, 3, 3) = I3;                   // Linear acceleration remains the same
-
-    
+        A_mat.block(12, 12, 3, 3) = I3;                   // Linear acceleration remains the same    
 
         B_mat.block(0, 0, 3, 3) = 0.5 * dt * dt * I3;  // Position effect (linear)
         B_mat.block(6, 0, 3, 3) = dt * I3;                  // Velocity effect (linear)
@@ -51,7 +49,6 @@ public:
 
         B_mat.block(0, 3, 3, 3) = 0.5 * dt * dt * I3;  // Orientation effect (rotational)
         B_mat.block(6, 3, 3, 3) = dt * I3;                  // Angular velocity effect
-
 
         Eigen::VectorXd Q_vector = Eigen::VectorXd(STATE_DIM);
         Eigen::VectorXd R_vector = Eigen::VectorXd(CONTROL_DIM);
@@ -62,9 +59,13 @@ public:
         Q_mat = Q_vector.asDiagonal();
         R_mat = R_vector.asDiagonal();
 
+
+        K_ = ct::core::FeedbackMatrix<STATE_DIM, CONTROL_DIM>::Zero();
+
         // Subscribe to the odometry and acceleration topics
-        odometry_sub = nh.subscribe("odometry", 1, odometryCallback);
-        acceleration_sub = nh.subscribe("acceleration", 1, accelerationCallback);
+        odometry_sub = nh.subscribe("odometry/filtered", 1, odometryCallback);
+        acceleration_sub = nh.subscribe("accel/filtered", 1, accelerationCallback);
+        cmd_vel_sub = nh.subscribe("cmd_vel", 1, setpointCallback);
 
         // Publish the control input
         control_pub = nh.advertise<geometry_msgs::Wrench>("thruster_manager/input", 1);
@@ -97,6 +98,16 @@ public:
         control_pub.publish(control_msg);
     }
 
+    static void setpointCallback(const geometry_msgs::Twist::ConstPtr& msg)
+    {
+        X0_[6] = msg->linear.x;
+        X0_[7] = msg->linear.y;
+        X0_[8] = msg->linear.z;
+        X0_[9] = msg->angular.x;
+        X0_[10] = msg->angular.y;
+        X0_[11] = msg->angular.z;
+    }
+
     static void odometryCallback(const nav_msgs::Odometry::ConstPtr& msg)
     {
         X_[0] = msg->pose.pose.position.x;
@@ -124,6 +135,16 @@ public:
         X_[14] = msg->accel.accel.linear.z;
     }
 
+    void computeLqr()
+    {
+        ct::optcon::LQR<STATE_DIM, CONTROL_DIM> lqr = ct::optcon::LQR<STATE_DIM, CONTROL_DIM>();
+        // std::cout << "A_mat: " << A_mat << std::endl;
+        // std::cout << "B_mat: " << B_mat << std::endl;
+        // std::cout << "Q_mat: " << Q_mat << std::endl;
+        // std::cout << "R_mat: " << R_mat << std::endl;
+        lqr.compute(Q_mat, R_mat, A_mat, B_mat, K_);
+    }
+
 
 private:
     void getRosParamVector(ros::NodeHandle& nh, const std::string& param_name, Eigen::VectorXd& vector, int size)
@@ -149,12 +170,6 @@ private:
         }
     }
 
-    void computeLqr()
-    {
-        ct::optcon::LQR<STATE_DIM, CONTROL_DIM> lqr;
-        lqr.compute(Q_mat, R_mat, A_mat, B_mat, K_);
-    }
-
     ros::NodeHandle& nh_;
     ct::core::FeedbackMatrix<STATE_DIM, CONTROL_DIM> K_;
     Eigen::MatrixXd A_mat;
@@ -164,6 +179,7 @@ private:
     ros::Publisher control_pub;
     ros::Subscriber odometry_sub;
     ros::Subscriber acceleration_sub;
+    ros::Subscriber cmd_vel_sub;
 };
 
 double LqrNode::X_[STATE_DIM] = {0};
@@ -175,6 +191,7 @@ int main(int argc, char** argv)
     ros::NodeHandle nh;
 
     LqrNode lqr_node(nh);
+    lqr_node.run();
 
     
     return 0;

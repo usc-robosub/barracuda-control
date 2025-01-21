@@ -37,6 +37,8 @@
   <!-- Thruster allocation matrix file path -->
   <arg name="tam_file" default="$(find barracuda_control)/config/TAM.yaml"/>
 
+  <rosparam command="load" file="$(find barracuda_control)/config/lqr_params.yaml" ns="$(arg model_name)"/>
+
   <include file="$(find uuv_thruster_manager)/launch/thruster_manager.launch">
     <arg name="model_name" value="$(arg model_name)"/>
     <arg name="uuv_name" value="$(arg uuv_name)"/>
@@ -47,4 +49,6 @@
     <arg name="config_file" value="$(arg config_file)"/>
     <arg name="tam_file" value="$(arg tam_file)"/>
    </include>
+
+   <node pkg="barracuda_control" name="lqr_node" type="lqr_node" ns="$(arg model_name)"/>
 </launch>

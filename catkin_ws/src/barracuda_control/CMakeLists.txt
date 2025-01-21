@@ -17,6 +17,8 @@ nav_msgs
 find_package(ct_core REQUIRED)
 find_package(ct_optcon REQUIRED)    
 find_package(Eigen3 REQUIRED)
+find_package(blasfeo REQUIRED)
+find_package(hpipm REQUIRED)
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -124,6 +126,10 @@ include_directories(
 # include
 ${catkin_INCLUDE_DIRS}
 ${ct_optcon_INCLUDE_DIRS}
+${ct_core_INCLUDE_DIRS}
+${EIGEN3_INCLUDE_DIR}
+${blasfeo_INCLUDE_DIRS}
+${hpipm_INCLUDE_DIRS}
 )
 
 ## Declare a C++ library
@@ -154,6 +160,9 @@ add_executable(lqr_node src/lqr_node.cpp)
 ## Specify libraries to link a library or executable target against
 target_link_libraries(lqr_node
   ${catkin_LIBRARIES}
+  ct_core
+  ct_optcon
+  blasfeo
 )
 
 #############

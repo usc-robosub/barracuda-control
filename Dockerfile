@@ -6,6 +6,7 @@ RUN sudo apt-get update \
     ros-noetic-tf2 \
     libeigen3-dev \
     libboost-all-dev \    
+    liblapack-dev \
     python3-catkin-tools \
     doxygen \
     && rm -rf /var/lib/apt/lists/*
