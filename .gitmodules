@@ -1,9 +1,9 @@
 [submodule "catkin_ws/src/uuv_control"]
 	path = catkin_ws/src/uuv_control
-	url = git@github.com:usc-robosub/uuv_control.git
+	url = https://github.com/usc-robosub/uuv_control.git
 [submodule "catkin_ws/src/uuv_assistants"]
 	path = catkin_ws/src/uuv_assistants
-	url = git@github.com:usc-robosub/uuv_assistants.git
+	url = https://github.com/usc-robosub/uuv_assistants.git
 [submodule "catkin_ws/src/kindr"]
 	path = catkin_ws/src/kindr
 	url = https://github.com/ANYbotics/kindr.git
