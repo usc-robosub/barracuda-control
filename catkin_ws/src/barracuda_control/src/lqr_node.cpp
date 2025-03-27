@@ -14,12 +14,12 @@ class LqrNode
 public:
     static double X_[STATE_DIM];
     static double X0_[STATE_DIM];
+    int rate;
 
     LqrNode(ros::NodeHandle& nh)
         : nh_(nh)
     {
         ROS_INFO("Discrete-time LQR Node initialized and running.");
-        int rate;
         double dt;
         nh.getParam("lqr/update_rate", rate);
         dt = 1.0 / rate;
