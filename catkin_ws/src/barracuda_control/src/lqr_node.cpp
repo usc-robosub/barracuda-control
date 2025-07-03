@@ -26,7 +26,6 @@ public:
 
         // Define basic identity matrices for 3 and 15 dimensions.
         Eigen::MatrixXd I3 = Eigen::MatrixXd::Identity(3, 3);
-        Eigen::MatrixXd I15 = Eigen::MatrixXd::Identity(STATE_DIM, STATE_DIM);
 
         // Define your vehicle's physical parameters here.
         // These are placeholders – replace with your actual values.
