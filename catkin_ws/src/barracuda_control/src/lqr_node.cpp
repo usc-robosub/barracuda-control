@@ -14,67 +14,91 @@ class LqrNode
 public:
     static double X_[STATE_DIM];
     static double X0_[STATE_DIM];
+    int rate;
 
     LqrNode(ros::NodeHandle& nh)
         : nh_(nh)
     {
-        ROS_INFO("LQR Node initialized and running.");
-        int rate;
+        ROS_INFO("Discrete-time LQR Node initialized and running.");
         double dt;
         nh.getParam("lqr/update_rate", rate);
-
         dt = 1.0 / rate;
 
-        // Define the state and control matrices
-        // Create an identity matrix of size 3x3 for linear and angular components
+        // Define basic identity matrices for 3 and 15 dimensions.
         Eigen::MatrixXd I3 = Eigen::MatrixXd::Identity(3, 3);
-        Eigen::MatrixXd I6 = Eigen::MatrixXd::Identity(6, 6);
 
-        A_mat = Eigen::MatrixXd::Zero(STATE_DIM, STATE_DIM);
-        B_mat = Eigen::MatrixXd::Zero(STATE_DIM, CONTROL_DIM);
+        // Define your vehicle's physical parameters here.
+        // These are placeholders – replace with your actual values.
+        // Effective translational mass: rigid-body mass plus added mass.
+        Eigen::MatrixXd M_t = Eigen::MatrixXd::Identity(3, 3);  
+        // Effective rotational inertia: rigid-body inertia plus added inertia.
+        Eigen::MatrixXd I_rot = Eigen::MatrixXd::Identity(3, 3);  
+        // Damping matrices evaluated at the operating point.
+        Eigen::MatrixXd D_t = Eigen::MatrixXd::Zero(3, 3);  // Translational damping
+        Eigen::MatrixXd D_r = Eigen::MatrixXd::Zero(3, 3);  // Rotational damping
 
-        // Fill A_d based on the discrete-time formula
-        A_mat.block(0, 0, 6, 6) = I6;                    // Position and orientation update
-        A_mat.block(0, 6, 6, 6) = dt * I6;           // Velocity contribution
-        A_mat.block(0, 12, 3, 3) = 0.5 * dt * dt * I3;  // Acceleration contribution (only linear)
+        // Precompute inverses (assumed invertible)
+        Eigen::MatrixXd M_t_inv = M_t.inverse();
+        Eigen::MatrixXd I_rot_inv = I_rot.inverse();
 
-        A_mat.block(6, 6, 6, 6) = I6;                     // Velocity update
-        A_mat.block(6, 12, 3, 3) = dt * I3;           // Acceleration contribution (only linear)
+        // Build discrete-time state-space matrices directly.
+        // State ordering: [ p (indices 0-2); theta (3-5); v (6-8); omega (9-11); a (12-14) ]
+        Eigen::MatrixXd A_d = Eigen::MatrixXd::Zero(STATE_DIM, STATE_DIM);
+        Eigen::MatrixXd B_d = Eigen::MatrixXd::Zero(STATE_DIM, CONTROL_DIM);
 
-        A_mat.block(12, 12, 3, 3) = I3;                   // Linear acceleration remains the same    
+        // Position update: p[k+1] = p[k] + dt * v[k]
+        A_d.block(0, 0, 3, 3) = I3;
+        A_d.block(0, 6, 3, 3) = dt * I3;
 
-        B_mat.block(0, 0, 3, 3) = 0.5 * dt * dt * I3;  // Position effect (linear)
-        B_mat.block(6, 0, 3, 3) = dt * I3;                  // Velocity effect (linear)
-        B_mat.block(12, 0, 3, 3) = I3;                           // Acceleration effect (linear)
+        // Orientation update: theta[k+1] = theta[k] + dt * omega[k]
+        A_d.block(3, 3, 3, 3) = I3;
+        A_d.block(3, 9, 3, 3) = dt * I3;
 
-        B_mat.block(0, 3, 3, 3) = 0.5 * dt * dt * I3;  // Orientation effect (rotational)
-        B_mat.block(6, 3, 3, 3) = dt * I3;                  // Angular velocity effect
+        // Velocity update: v[k+1] = v[k] + dt * a[k]
+        A_d.block(6, 6, 3, 3) = I3;
+        A_d.block(6, 12, 3, 3) = dt * I3;
 
+        // Angular velocity update:
+        // omega[k+1] = (I - dt*I_rot_inv*D_r) * omega[k] + dt*I_rot_inv*delta_M
+        A_d.block(9, 9, 3, 3) = I3 - dt * I_rot_inv * D_r;
+
+        // Acceleration update:
+        // a[k+1] = (I - dt*M_t_inv*D_t) * a[k] + dt*M_t_inv*delta_F
+        A_d.block(12, 12, 3, 3) = I3 - dt * M_t_inv * D_t;
+
+        // Input matrix B_d.
+        // Force input delta_F affects the acceleration dynamics.
+        B_d.block(12, 0, 3, 3) = dt * M_t_inv;
+        // Moment input delta_M affects the angular velocity dynamics.
+        B_d.block(9, 3, 3, 3) = dt * I_rot_inv;
+
+        ROS_INFO_STREAM("Discrete-time A matrix:\n" << A_d);
+        ROS_INFO_STREAM("Discrete-time B matrix:\n" << B_d);
+
+        // Load the weighting matrices Q and R from ROS parameters.
         Eigen::VectorXd Q_vector = Eigen::VectorXd(STATE_DIM);
         Eigen::VectorXd R_vector = Eigen::VectorXd(CONTROL_DIM);
-
         getRosParamVector(nh, "lqr/Q", Q_vector, STATE_DIM);
         getRosParamVector(nh, "lqr/R", R_vector, CONTROL_DIM);
+        Eigen::MatrixXd Q_mat = Q_vector.asDiagonal();
+        Eigen::MatrixXd R_mat = R_vector.asDiagonal();
 
-        Q_mat = Q_vector.asDiagonal();
-        R_mat = R_vector.asDiagonal();
-
-
+        // Compute the discrete-time LQR gain using your chosen method.
         K_ = ct::core::FeedbackMatrix<STATE_DIM, CONTROL_DIM>::Zero();
+        // [Insert your discrete-time LQR synthesis here using A_d, B_d, Q_mat, and R_mat.]
 
-        // Subscribe to the odometry and acceleration topics
+        // Set up ROS subscribers and publishers.
         odometry_sub = nh.subscribe("odometry/filtered", 1, odometryCallback);
         acceleration_sub = nh.subscribe("accel/filtered", 1, accelerationCallback);
         cmd_vel_sub = nh.subscribe("cmd_vel", 1, setpointCallback);
-
         // Publish the control input
         control_pub = nh.advertise<geometry_msgs::Wrench>("thruster_manager/input", 1);
     }
 
-    void run()
+    void run() // main loop
     {
-        ros::Rate rate(rate);
-        while (ros::ok())
+        ros::Rate rate(rate); //
+        while (ros::ok()) 
         {
             computeLqr();
             publishControl();
