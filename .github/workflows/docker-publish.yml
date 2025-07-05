@@ -4,9 +4,6 @@ on:
   push:
     branches:
       - main
-    paths:
-      - 'barracuda-control/**'
-      - '.github/workflows/docker-publish-control.yml'
 
 jobs:
   build-and-publish:
