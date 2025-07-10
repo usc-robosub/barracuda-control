@@ -85,14 +85,20 @@ public:
         Eigen::MatrixXd Q_mat = Q_vector.asDiagonal();
         Eigen::MatrixXd R_mat = R_vector.asDiagonal();
 
-        // Compute the discrete-time LQR gain using your chosen method.
+        // Store the computed matrices for LQR synthesis
+        A_mat = A_d;
+        B_mat = B_d;
+        Q_mat = Q_vector.asDiagonal();
+        R_mat = R_vector.asDiagonal();
+        
+        // Initialize feedback gain matrix
         K_ = ct::core::FeedbackMatrix<STATE_DIM, CONTROL_DIM>::Zero();
-        // [Insert your discrete-time LQR synthesis here using A_d, B_d, Q_mat, and R_mat.]
 
         // Set up ROS subscribers and publishers.
         odometry_sub = nh.subscribe("odometry/filtered", 1, odometryCallback);
         acceleration_sub = nh.subscribe("accel/filtered", 1, accelerationCallback);
-        cmd_vel_sub = nh.subscribe("cmd_vel", 1, setpointCallback);
+        target_odometry_sub = nh.subscribe("target_odometry", 1, targetOdometryCallback);
+        target_acceleration_sub = nh.subscribe("target_accel", 1, targetAccelerationCallback);
         // Publish the control input
         control_pub = nh.advertise<geometry_msgs::Wrench>("thruster_manager/input", 1);
         
@@ -140,14 +146,35 @@ public:
         control_pub.publish(control_msg);
     }
 
-    static void setpointCallback(const geometry_msgs::Twist::ConstPtr& msg)
+    static void targetOdometryCallback(const nav_msgs::Odometry::ConstPtr& msg)
     {
-        X0_[6] = msg->linear.x;
-        X0_[7] = msg->linear.y;
-        X0_[8] = msg->linear.z;
-        X0_[9] = msg->angular.x;
-        X0_[10] = msg->angular.y;
-        X0_[11] = msg->angular.z;
+        // Set target position (indices 0-2)
+        X0_[0] = msg->pose.pose.position.x;
+        X0_[1] = msg->pose.pose.position.y;
+        X0_[2] = msg->pose.pose.position.z;
+        
+        // Set target orientation (indices 3-5)
+        Eigen::Quaterniond q(msg->pose.pose.orientation.w, msg->pose.pose.orientation.x, msg->pose.pose.orientation.y, msg->pose.pose.orientation.z);
+        Eigen::Vector3d euler = q.toRotationMatrix().eulerAngles(0, 1, 2);
+        X0_[3] = euler[0];
+        X0_[4] = euler[1];
+        X0_[5] = euler[2];
+
+        // Set target velocities (indices 6-11)
+        X0_[6] = msg->twist.twist.linear.x;
+        X0_[7] = msg->twist.twist.linear.y;
+        X0_[8] = msg->twist.twist.linear.z;
+        X0_[9] = msg->twist.twist.angular.x;
+        X0_[10] = msg->twist.twist.angular.y;
+        X0_[11] = msg->twist.twist.angular.z;
+    }
+
+    static void targetAccelerationCallback(const geometry_msgs::AccelWithCovarianceStamped::ConstPtr& msg)
+    {
+        // Set target accelerations (indices 12-14)
+        X0_[12] = msg->accel.accel.linear.x;
+        X0_[13] = msg->accel.accel.linear.y;
+        X0_[14] = msg->accel.accel.linear.z;
     }
 
     static void odometryCallback(const nav_msgs::Odometry::ConstPtr& msg)
@@ -238,7 +265,8 @@ private:
     ros::Publisher control_pub;
     ros::Subscriber odometry_sub;
     ros::Subscriber acceleration_sub;
-    ros::Subscriber cmd_vel_sub;
+    ros::Subscriber target_odometry_sub;
+    ros::Subscriber target_acceleration_sub;
     ros::ServiceServer thrust_zero_service;
 };
 
