@@ -1,0 +1,8 @@
+# Service to set thrust to zero
+# Request
+bool enable_thrust_zero  # true to set thrust to zero, false to resume normal operation
+
+---
+# Response
+bool success             # true if the operation succeeded
+string message           # informational message

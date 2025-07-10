@@ -5,6 +5,7 @@
 #include <geometry_msgs/AccelWithCovarianceStamped.h>
 #include <geometry_msgs/Twist.h>
 #include <ros/ros.h>
+#include "barracuda_control/SetThrustZero.h"
 
 #define STATE_DIM 15
 #define CONTROL_DIM 6
@@ -15,9 +16,10 @@ public:
     static double X_[STATE_DIM];
     static double X0_[STATE_DIM];
     int rate;
+    bool thrust_zero_enabled;
 
     LqrNode(ros::NodeHandle& nh)
-        : nh_(nh)
+        : nh_(nh), thrust_zero_enabled(false)
     {
         ROS_INFO("Discrete-time LQR Node initialized and running.");
         double dt;
@@ -93,6 +95,9 @@ public:
         cmd_vel_sub = nh.subscribe("cmd_vel", 1, setpointCallback);
         // Publish the control input
         control_pub = nh.advertise<geometry_msgs::Wrench>("thruster_manager/input", 1);
+        
+        // Set up service server for thrust zero control
+        thrust_zero_service = nh.advertiseService("set_thrust_zero", &LqrNode::setThrustZeroCallback, this);
     }
 
     void run() // main loop
@@ -109,16 +114,29 @@ public:
 
     void publishControl()
     {
-        Eigen::VectorXd X = Eigen::Map<Eigen::VectorXd>(X_, STATE_DIM);
-        Eigen::VectorXd X0 = Eigen::Map<Eigen::VectorXd>(X0_, STATE_DIM);
-        Eigen::VectorXd U = -K_ * (X - X0);
         geometry_msgs::Wrench control_msg;
-        control_msg.force.x = U[0];
-        control_msg.force.y = U[1];
-        control_msg.force.z = U[2];
-        control_msg.torque.x = U[3];
-        control_msg.torque.y = U[4];
-        control_msg.torque.z = U[5];
+        
+        if (thrust_zero_enabled) {
+            // Set all forces and torques to zero
+            control_msg.force.x = 0.0;
+            control_msg.force.y = 0.0;
+            control_msg.force.z = 0.0;
+            control_msg.torque.x = 0.0;
+            control_msg.torque.y = 0.0;
+            control_msg.torque.z = 0.0;
+        } else {
+            // Normal LQR control computation
+            Eigen::VectorXd X = Eigen::Map<Eigen::VectorXd>(X_, STATE_DIM);
+            Eigen::VectorXd X0 = Eigen::Map<Eigen::VectorXd>(X0_, STATE_DIM);
+            Eigen::VectorXd U = -K_ * (X - X0);
+            control_msg.force.x = U[0];
+            control_msg.force.y = U[1];
+            control_msg.force.z = U[2];
+            control_msg.torque.x = U[3];
+            control_msg.torque.y = U[4];
+            control_msg.torque.z = U[5];
+        }
+        
         control_pub.publish(control_msg);
     }
 
@@ -169,6 +187,23 @@ public:
         lqr.compute(Q_mat, R_mat, A_mat, B_mat, K_);
     }
 
+    bool setThrustZeroCallback(barracuda_control::SetThrustZero::Request& req,
+                               barracuda_control::SetThrustZero::Response& res)
+    {
+        thrust_zero_enabled = req.enable_thrust_zero;
+        res.success = true;
+        
+        if (thrust_zero_enabled) {
+            res.message = "Thrust set to zero - all thrusters disabled";
+            ROS_INFO("Thrust zero enabled - all thrusters set to zero");
+        } else {
+            res.message = "Normal LQR control resumed";
+            ROS_INFO("Thrust zero disabled - normal LQR control resumed");
+        }
+        
+        return true;
+    }
+
 
 private:
     void getRosParamVector(ros::NodeHandle& nh, const std::string& param_name, Eigen::VectorXd& vector, int size)
@@ -204,6 +239,7 @@ private:
     ros::Subscriber odometry_sub;
     ros::Subscriber acceleration_sub;
     ros::Subscriber cmd_vel_sub;
+    ros::ServiceServer thrust_zero_service;
 };
 
 double LqrNode::X_[STATE_DIM] = {0};
