@@ -17,18 +17,24 @@ COPY . /opt/barracuda-control
 WORKDIR /opt
 
 
-RUN . /opt/ros/noetic/setup.sh \ 
-    && cd /opt/barracuda-control/dependencies/blasfeo && mkdir build && cd build \
-    && cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON -DBLASFEO_EXAMPLES=OFF \
-    && make -j4 \
-    && sudo make install -j\ 
-    && cd ../../hpipm && mkdir build && cd build\
-    && cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON -DHPIPM_TESTING=OFF \
-    && make -j4 \
-    && sudo make install -j\
-    && export LD_LIBRARY_PATH=/opt/blasfeo/lib:/opt/hpipm/lib:$LD_LIBRARY_PATH \
-    && cd /opt/barracuda-control/catkin_ws \
-    && catkin build -DCMAKE_BUILD_TYPE=Release
+RUN . /opt/ros/noetic/setup.sh && \
+    cd /opt/barracuda-control/dependencies/blasfeo && \
+    mkdir build && cd build && \
+    cmake .. \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DBUILD_SHARED_LIBS=ON \
+      -DBLASFEO_EXAMPLES=OFF \
+      -DTARGET=GENERIC && \
+    make -j4 && sudo make install -j && \
+    cd ../../hpipm && mkdir build && cd build && \
+    cmake .. \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DBUILD_SHARED_LIBS=ON \
+      -DHPIPM_TESTING=OFF && \
+    make -j4 && sudo make install -j && \
+    export LD_LIBRARY_PATH=/opt/blasfeo/lib:/opt/hpipm/lib:$LD_LIBRARY_PATH && \
+    cd /opt/barracuda-control/catkin_ws && \
+    catkin build -DCMAKE_BUILD_TYPE=Release
 
 # Source the workspace on container start
 CMD ["/bin/bash", "/opt/barracuda-control/entrypoint.sh"]
