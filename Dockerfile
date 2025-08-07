@@ -30,7 +30,8 @@ RUN . /opt/ros/noetic/setup.sh && \
     cmake .. \
       -DCMAKE_BUILD_TYPE=Release \
       -DBUILD_SHARED_LIBS=ON \
-      -DHPIPM_TESTING=OFF && \
+      -DHPIPM_TESTING=OFF \
+      -DTARGET=GENERIC && \
     make -j4 && sudo make install -j && \
     export LD_LIBRARY_PATH=/opt/blasfeo/lib:/opt/hpipm/lib:$LD_LIBRARY_PATH && \
     cd /opt/barracuda-control/catkin_ws && \
