@@ -82,9 +82,6 @@ public:
         Eigen::VectorXd R_vector = Eigen::VectorXd(CONTROL_DIM);
         getRosParamVector(nh, "lqr/Q", Q_vector, STATE_DIM);
         getRosParamVector(nh, "lqr/R", R_vector, CONTROL_DIM);
-        Eigen::MatrixXd Q_mat = Q_vector.asDiagonal();
-        Eigen::MatrixXd R_mat = R_vector.asDiagonal();
-
         // Store the computed matrices for LQR synthesis
         A_mat = A_d;
         B_mat = B_d;
@@ -108,13 +105,13 @@ public:
 
     void run() // main loop
     {
-        ros::Rate rate(rate); //
-        while (ros::ok()) 
+        ros::Rate loop_rate(rate);
+        while (ros::ok())
         {
             computeLqr();
             publishControl();
             ros::spinOnce();
-            rate.sleep();
+            loop_rate.sleep();
         }
     }
 
