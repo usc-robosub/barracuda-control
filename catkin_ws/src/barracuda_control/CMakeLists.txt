@@ -149,6 +149,7 @@ ${hpipm_INCLUDE_DIRS}
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
 add_executable(lqr_node src/lqr_node.cpp)
+add_executable(pid_node src/pid_node.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -159,6 +160,7 @@ add_executable(lqr_node src/lqr_node.cpp)
 ## Add cmake target dependencies of the executable
 ## same as for the library above
 add_dependencies(lqr_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(pid_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
 target_link_libraries(lqr_node
@@ -166,6 +168,9 @@ target_link_libraries(lqr_node
   ct_core
   ct_optcon
   blasfeo
+)
+target_link_libraries(pid_node
+  ${catkin_LIBRARIES}
 )
 
 #############
