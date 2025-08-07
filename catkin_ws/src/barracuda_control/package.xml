@@ -38,6 +38,7 @@
   <depend>geometry_msgs</depend>
   <depend>nav_msgs</depend>
   <depend>std_msgs</depend>
+  <depend>tf</depend>
   <depend>ct_core</depend>
   <depend>ct_rbd</depend>
   <depend>ct_optcon</depend>
