@@ -30,7 +30,10 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push barracuda-control
-        run: |
-          IMAGE_NAME=ghcr.io/${{ github.repository_owner }}/barracuda-control:latest
-          docker build --no-cache -t $IMAGE_NAME .
-          docker push $IMAGE_NAME
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          platforms: linux/arm64
+          tags: ghcr.io/${{ github.repository_owner }}/barracuda-control:latest
+
