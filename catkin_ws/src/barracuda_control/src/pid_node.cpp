@@ -24,7 +24,7 @@ public:
         T_map_robot_.setIdentity();
         T_map_target_.setIdentity();
         control_pub_ = nh_.advertise<geometry_msgs::Wrench>("thruster_manager/input", 1);
-        odom_sub_ = nh_.subscribe("odometry/filtered", 1, &PIDNode::odometryCallback, this);
+        odom_sub_ = nh_.subscribe("odometry_map/filtered", 1, &PIDNode::odometryCallback, this);
         target_sub_ = nh_.subscribe("target_odometry", 1, &PIDNode::targetCallback, this);
         thrust_zero_srv_ = nh_.advertiseService("set_thrust_zero", &PIDNode::setThrustZeroCallback, this);
     }
