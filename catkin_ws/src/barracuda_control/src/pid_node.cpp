@@ -115,8 +115,9 @@ private:
     bool setThrustZeroCallback(barracuda_control::SetThrustZero::Request& req,
                                barracuda_control::SetThrustZero::Response& res)
     {
-        thrust_zero_enabled_ = req.enable;
+        thrust_zero_enabled_ = req.enable_thrust_zero;
         res.success = true;
+        res.message = thrust_zero_enabled_ ? "Thrust zero enabled" : "Thrust zero disabled";
         return true;
     }
 
