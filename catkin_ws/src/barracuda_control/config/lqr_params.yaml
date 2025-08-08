@@ -1,11 +1,44 @@
 lqr:
   update_rate: 50
-  Q: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
-  R: [1, 1, 1, 1, 1, 1]
-  M_t: [1, 0, 0, 0, 1, 0, 0, 0, 1]
-  I_rot: [1, 0, 0, 0, 1, 0, 0, 0, 1]
-  D_t: [0, 0, 0, 0, 0, 0, 0, 0, 0]
-  D_r: [0, 0, 0, 0, 0, 0, 0, 0, 0]
+  # LQR state weights [p(0-2), theta(3-5), v(6-8), omega(9-11)]
+  # Keep moderate tracking while damping motion
+  Q: [4, 4, 4, 4, 4, 4, 20, 20, 20, 20, 20, 20]
+  # Control effort penalty; increased to reduce chatter
+  R: [4, 4, 4, 4, 4, 4]
+  # Physical model from provided URDF/xacro
+  # Base mass/inertia: m = 36.3 kg, I = diag(2.5, 8.0, 8.5)
+  # Added mass (6x6, from URDF hydrodynamic model, row-major):
+  #  15.0 -0.1  -2.0   0.2  -3.0  -0.15
+  #  -0.1 25.0   1.0   8.0  -0.1   1.2
+  #  -2.0  1.0  70.0   0.1  -7.5   0.2
+  #   0.2  8.0   0.1  10.0  -0.2   0.4
+  #  -3.0 -0.1  -7.5  -0.2  16.0  -0.02
+  #  -0.15 1.2  0.2   0.4  -0.02  4.5
+  # Effective M6 = base_diag + added_mass
+  M6: [
+    51.3, -0.1, -2.0,  0.2,  -3.0,  -0.15,
+    -0.1, 61.3,  1.0,  8.0,  -0.1,   1.2,
+    -2.0,  1.0, 106.3, 0.1,  -7.5,   0.2,
+     0.2,  8.0,  0.1, 12.5,  -0.2,   0.4,
+    -3.0, -0.1, -7.5, -0.2,  24.0,  -0.02,
+    -0.15, 1.2,  0.2,  0.4,  -0.02, 13.0
+  ]
+  # Linear damping (6x6 diagonal, magnitudes; URDF gives negatives)
+  D6: [
+    15.0, 0,    0,    0,    0,   0,
+    0,    12.0, 0,    0,    0,   0,
+    0,    0,    35.0, 0,    0,   0,
+    0,    0,    0,    25.0, 0,   0,
+    0,    0,    0,    0,    20.0,0,
+    0,    0,    0,    0,    0,   8.0
+  ]
+  # Fallback block-diagonal (used only if M6/D6 not set)
+  M_t: [51.3, 0, 0, 0, 61.3, 0, 0, 0, 106.3]
+  I_rot: [12.5, 0, 0, 0, 24.0, 0, 0, 0, 13.0]
+  D_t: [15, 0, 0, 0, 12, 0, 0, 0, 35]
+  D_r: [25, 0, 0, 0, 20, 0, 0, 0, 8]
+  # Optional control smoothing (1.0 = off / no smoothing)
+  control_smoothing_alpha: 0.6
 
 target_pose:
   position:

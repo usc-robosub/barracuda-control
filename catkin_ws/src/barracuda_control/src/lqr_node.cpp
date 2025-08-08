@@ -18,37 +18,67 @@ public:
   static Eigen::Quaterniond target_quat_;
   int rate;
   bool thrust_zero_enabled;
+  double dt_;
 
   LqrNode(ros::NodeHandle &nh) : nh_(nh), thrust_zero_enabled(false) {
     ROS_INFO("Discrete-time LQR Node initialized and running.");
     double dt;
     nh.getParam("lqr/update_rate", rate);
+    // Optional control smoothing in [0,1], where 1.0 = no smoothing
+    nh.param("lqr/control_smoothing_alpha", smoothing_alpha_, 1.0);
+    if (smoothing_alpha_ < 0.0)
+      smoothing_alpha_ = 0.0;
+    if (smoothing_alpha_ > 1.0)
+      smoothing_alpha_ = 1.0;
     dt = 1.0 / rate;
+    dt_ = dt;
 
     // Define basic identity matrix for convenience
     Eigen::Matrix3d I3 = Eigen::Matrix3d::Identity();
 
-    // Vehicle physical parameters. Defaults are identity/zero but can be
-    // overridden via ROS parameters.
+    // Vehicle physical parameters. Prefer full 6x6 model if provided.
+    // Fallback uses block-diagonal 3x3 matrices.
     Eigen::Matrix3d M_t = Eigen::Matrix3d::Identity();   // translational mass
     Eigen::Matrix3d I_rot = Eigen::Matrix3d::Identity(); // rotational inertia
-    Eigen::Matrix3d D_t = Eigen::Matrix3d::Zero(); // translational damping
-    Eigen::Matrix3d D_r = Eigen::Matrix3d::Zero(); // rotational damping
+    Eigen::Matrix3d D_t = Eigen::Matrix3d::Zero();       // translational damping
+    Eigen::Matrix3d D_r = Eigen::Matrix3d::Zero();       // rotational damping
     getRosParamMatrix(nh, "lqr/M_t", M_t, true);
     getRosParamMatrix(nh, "lqr/I_rot", I_rot, true);
     getRosParamMatrix(nh, "lqr/D_t", D_t, false);
     getRosParamMatrix(nh, "lqr/D_r", D_r, false);
 
-    // Precompute inverses (assumed invertible)
-    Eigen::Matrix3d M_t_inv = M_t.inverse();
-    Eigen::Matrix3d I_rot_inv = I_rot.inverse();
+    Eigen::Matrix<double, 6, 6> M6 = Eigen::Matrix<double, 6, 6>::Zero();
+    Eigen::Matrix<double, 6, 6> D6 = Eigen::Matrix<double, 6, 6>::Zero();
+    bool have_M6 = getRosParamMatrix6(nh, "lqr/M6", M6);
+    bool have_D6 = getRosParamMatrix6(nh, "lqr/D6", D6);
+
+    if (!have_M6) {
+      M6.topLeftCorner<3, 3>() = M_t;
+      M6.bottomRightCorner<3, 3>() = I_rot;
+      ROS_INFO("Using block-diagonal mass/inertia (no lqr/M6 provided)");
+    } else {
+      ROS_INFO("Using full 6x6 mass/inertia from lqr/M6");
+    }
+
+    if (!have_D6) {
+      D6.topLeftCorner<3, 3>() = D_t;
+      D6.bottomRightCorner<3, 3>() = D_r;
+      ROS_INFO("Using block-diagonal damping (no lqr/D6 provided)");
+    } else {
+      ROS_INFO("Using full 6x6 damping from lqr/D6");
+    }
+
+    // Precompute inverse of the 6x6 mass/inertia (assumed invertible)
+    Eigen::Matrix<double, 6, 6> M6_inv = M6.inverse();
 
     // Build discrete-time state-space matrices directly.
     // State ordering: [ p(0-2); theta(3-5); v(6-8); omega(9-11) ]
     Eigen::MatrixXd A_d = Eigen::MatrixXd::Zero(STATE_DIM, STATE_DIM);
     Eigen::MatrixXd B_d = Eigen::MatrixXd::Zero(STATE_DIM, CONTROL_DIM);
 
-    // Position update: p[k+1] = p[k] + dt * v[k]
+    // Position update (initialized assuming small angles):
+    // p[k+1] = p[k] + dt * R(q)^{} v_body[k]; we initialize with Identity and
+    // update with the current rotation each cycle in computeLqr().
     A_d.block<3, 3>(0, 0) = I3;
     A_d.block<3, 3>(0, 6) = dt * I3;
 
@@ -56,17 +86,21 @@ public:
     A_d.block<3, 3>(3, 3) = I3;
     A_d.block<3, 3>(3, 9) = dt * I3;
 
-    // Linear velocity update: v[k+1] = (I - dt*M_t^{-1}*D_t) * v[k] +
-    // dt*M_t^{-1} * delta_F
-    A_d.block<3, 3>(6, 6) = I3 - dt * M_t_inv * D_t;
+    // Combined body velocity update (v, omega):
+    // V6[k+1] = (I6 - dt * M6^{-1} * D6) * V6[k] + dt * M6^{-1} * U[k]
+    Eigen::Matrix<double, 6, 6> Avv =
+        Eigen::Matrix<double, 6, 6>::Identity() - dt * (M6_inv * D6);
+    A_d.block<3, 3>(6, 6) = Avv.topLeftCorner<3, 3>();
+    A_d.block<3, 3>(6, 9) = Avv.topRightCorner<3, 3>();
+    A_d.block<3, 3>(9, 6) = Avv.bottomLeftCorner<3, 3>();
+    A_d.block<3, 3>(9, 9) = Avv.bottomRightCorner<3, 3>();
 
-    // Angular velocity update: omega[k+1] = (I - dt*I_rot^{-1}*D_r) * omega[k]
-    // + dt*I_rot^{-1} * delta_M
-    A_d.block<3, 3>(9, 9) = I3 - dt * I_rot_inv * D_r;
-
-    // Input matrix
-    B_d.block<3, 3>(6, 0) = dt * M_t_inv;   // Force inputs
-    B_d.block<3, 3>(9, 3) = dt * I_rot_inv; // Moment inputs
+    // Input matrix (maps 6D wrench to V6 update)
+    Eigen::Matrix<double, 6, 6> Bv = dt * M6_inv;
+    B_d.block<3, 3>(6, 0) = Bv.topLeftCorner<3, 3>();
+    B_d.block<3, 3>(6, 3) = Bv.topRightCorner<3, 3>();
+    B_d.block<3, 3>(9, 0) = Bv.bottomLeftCorner<3, 3>();
+    B_d.block<3, 3>(9, 3) = Bv.bottomRightCorner<3, 3>();
 
     ROS_INFO_STREAM("Discrete-time A matrix:\n" << A_d);
     ROS_INFO_STREAM("Discrete-time B matrix:\n" << B_d);
@@ -86,7 +120,8 @@ public:
     K_ = ct::core::FeedbackMatrix<STATE_DIM, CONTROL_DIM>::Zero();
 
     // Set up ROS subscribers and publishers.
-    odometry_sub = nh.subscribe("odometry/filtered", 1, odometryCallback);
+    // Match PID node's odometry topic
+    odometry_sub = nh.subscribe("odometry/filtered/global", 1, odometryCallback);
     target_odometry_sub =
         nh.subscribe("target_odometry", 1, targetOdometryCallback);
     // Publish the control input
@@ -125,6 +160,12 @@ public:
       Eigen::VectorXd X = Eigen::Map<Eigen::VectorXd>(X_, STATE_DIM);
       Eigen::VectorXd X0 = Eigen::Map<Eigen::VectorXd>(X0_, STATE_DIM);
       Eigen::VectorXd U = -K_ * (X - X0);
+      if (smoothing_alpha_ < 1.0) {
+        if (U_prev_.size() != CONTROL_DIM)
+          U_prev_ = Eigen::VectorXd::Zero(CONTROL_DIM);
+        U = smoothing_alpha_ * U + (1.0 - smoothing_alpha_) * U_prev_;
+        U_prev_ = U;
+      }
       control_msg.force.x = U[0];
       control_msg.force.y = U[1];
       control_msg.force.z = U[2];
@@ -168,7 +209,22 @@ public:
         msg->pose.pose.orientation.w, msg->pose.pose.orientation.x,
         msg->pose.pose.orientation.y, msg->pose.pose.orientation.z);
     q_current.normalize();
-    Eigen::Quaterniond q_err = target_quat_.conjugate() * q_current;
+    // Cache world-from-body rotation for kinematics integration
+    Rwb_ = q_current.toRotationMatrix();
+
+    // Use the target quaternion in the same hemisphere as current to avoid
+    // jumps due to the q and -q equivalence.
+    Eigen::Quaterniond q_target = target_quat_;
+    if (q_current.dot(q_target) < 0.0) {
+      q_target.coeffs() *= -1.0;
+    }
+
+    // Relative rotation from current to target
+    Eigen::Quaterniond q_err = q_current.conjugate() * q_target;
+    // Ensure shortest representation (positive scalar part) to prevent 180° flips
+    if (q_err.w() < 0.0) {
+      q_err.coeffs() *= -1.0;
+    }
     Eigen::AngleAxisd aa(q_err);
     Eigen::Vector3d rot_vec = aa.axis() * aa.angle();
     X_[3] = rot_vec[0];
@@ -186,6 +242,9 @@ public:
   void computeLqr() {
     ct::optcon::LQR<STATE_DIM, CONTROL_DIM> lqr =
         ct::optcon::LQR<STATE_DIM, CONTROL_DIM>();
+    // Update the kinematic coupling from body-frame velocity to world position
+    // using the latest rotation estimate to avoid circular drift.
+    A_mat.block<3, 3>(0, 6) = dt_ * Rwb_;
     // std::cout << "A_mat: " << A_mat << std::endl;
     // std::cout << "B_mat: " << B_mat << std::endl;
     // std::cout << "Q_mat: " << Q_mat << std::endl;
@@ -239,14 +298,39 @@ private:
       } else {
         ROS_ERROR("Incorrect size for %s. Expected 9 but got %d elements.",
                   param_name.c_str(), (int)values.size());
-        matrix = use_identity_default ? Eigen::Matrix3d::Identity()
-                                      : Eigen::Matrix3d::Zero();
+        if (use_identity_default) {
+          matrix.setIdentity();
+        } else {
+          matrix.setZero();
+        }
       }
     } else {
       ROS_WARN("Failed to load matrix: %s, using default.", param_name.c_str());
-      matrix = use_identity_default ? Eigen::Matrix3d::Identity()
-                                    : Eigen::Matrix3d::Zero();
+      if (use_identity_default) {
+        matrix.setIdentity();
+      } else {
+        matrix.setZero();
+      }
     }
+  }
+
+  // Try to read a 6x6 matrix in row-major order from a flat vector parameter
+  // with 36 elements. Returns true if the parameter exists and has correct
+  // size; otherwise leaves 'matrix' unchanged and returns false.
+  bool getRosParamMatrix6(ros::NodeHandle &nh, const std::string &param_name,
+                          Eigen::Matrix<double, 6, 6> &matrix) {
+    std::vector<double> values;
+    if (!nh.getParam(param_name, values)) {
+      return false;
+    }
+    if (values.size() != 36) {
+      ROS_ERROR("Incorrect size for %s. Expected 36 but got %d elements.",
+                param_name.c_str(), (int)values.size());
+      return false;
+    }
+    matrix = Eigen::Map<Eigen::Matrix<double, 6, 6, Eigen::RowMajor>>(values.data());
+    ROS_INFO("Loaded 6x6 matrix %s from ROS parameters.", param_name.c_str());
+    return true;
   }
 
   ros::NodeHandle &nh_;
@@ -255,6 +339,9 @@ private:
   Eigen::MatrixXd B_mat;
   Eigen::MatrixXd Q_mat;
   Eigen::MatrixXd R_mat;
+  double smoothing_alpha_ = 1.0;
+  Eigen::VectorXd U_prev_;
+  static Eigen::Matrix3d Rwb_;
   ros::Publisher control_pub;
   ros::Subscriber odometry_sub;
   ros::Subscriber target_odometry_sub;
@@ -264,6 +351,7 @@ private:
 double LqrNode::X_[STATE_DIM] = {0};
 double LqrNode::X0_[STATE_DIM] = {0};
 Eigen::Quaterniond LqrNode::target_quat_(1, 0, 0, 0);
+Eigen::Matrix3d LqrNode::Rwb_ = Eigen::Matrix3d::Identity();
 
 int main(int argc, char **argv) {
   ros::init(argc, argv, "lqr_node");
