@@ -1,0 +1,7 @@
+<launch>
+  <!-- Load PID and target pose parameters -->
+  <rosparam command="load" file="$(find barracuda_control)/config/pid_params.yaml"/>
+
+  <!-- Publish a target pose for testing -->
+  <node pkg="barracuda_control" type="test_target_pose.py" name="test_target_pose" output="screen"/>
+</launch>
