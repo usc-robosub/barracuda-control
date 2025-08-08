@@ -18,6 +18,7 @@ def publish_target_pose():
     rate = rospy.Rate(10)
 
     odom_msg = Odometry()
+    odom_msg.header.frame_id = "map"
     odom_msg.pose.pose.position.x = position.get("x", 0.0)
     odom_msg.pose.pose.position.y = position.get("y", 0.0)
     odom_msg.pose.pose.position.z = position.get("z", 0.0)
@@ -33,6 +34,7 @@ def publish_target_pose():
     odom_msg.pose.pose.orientation.w = q[3]
 
     while not rospy.is_shutdown():
+        odom_msg.header.stamp = rospy.Time.now()
         odom_pub.publish(odom_msg)
         rate.sleep()
 
