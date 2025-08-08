@@ -10,11 +10,15 @@ from tf.transformations import quaternion_from_euler
 def publish_target_pose():
     """Publish the target pose from parameters to ``target_odometry``."""
     rospy.init_node("test_target_pose", anonymous=True)
+    rospy.loginfo("Initializing target pose publisher node.")
 
     position = rospy.get_param("target_pose/position", {})
     orientation = rospy.get_param("target_pose/orientation", {})
 
-    odom_pub = rospy.Publisher("target_odometry", Odometry, queue_size=10)
+    rospy.loginfo(f"Loaded target position parameters: {position}")
+    rospy.loginfo(f"Loaded target orientation parameters: {orientation}")
+
+    odom_pub = rospy.Publisher("barracuda/target_odometry", Odometry, queue_size=10)
     rate = rospy.Rate(10)
 
     odom_msg = Odometry()
@@ -33,9 +37,11 @@ def publish_target_pose():
     odom_msg.pose.pose.orientation.z = q[2]
     odom_msg.pose.pose.orientation.w = q[3]
 
+    rospy.loginfo("Starting to publish target odometry messages at 10 Hz.")
     while not rospy.is_shutdown():
         odom_msg.header.stamp = rospy.Time.now()
         odom_pub.publish(odom_msg)
+        rospy.logdebug("Published target odometry message.")
         rate.sleep()
 
 
@@ -43,5 +49,5 @@ if __name__ == "__main__":
     try:
         publish_target_pose()
     except rospy.ROSInterruptException:
-        pass
+        rospy.logwarn("ROS node interrupted before completion.")
 
