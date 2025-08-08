@@ -8,7 +8,7 @@ Barracuda Control implements a sophisticated 6-DOF optimal control system using 
 
 ### Key Features
 
-- **Optimal Control**: LQR-based controller for 15-dimensional state space
+- **Optimal Control**: LQR-based controller for a 12-dimensional state space
 - **High Performance**: 50 Hz control loop with optimized linear algebra
 - **Safety First**: Emergency thrust shutdown service
 - **Modular Design**: Clean separation between control logic and thruster allocation
@@ -18,12 +18,11 @@ Barracuda Control implements a sophisticated 6-DOF optimal control system using 
 ## System Architecture
 
 ### Control System
-- **State Representation** (15 dimensions):
+- **State Representation** (12 dimensions):
   - Position: `[x, y, z]` (3D coordinates)
-  - Orientation: `[roll, pitch, yaw]` (Euler angles)
-  - Linear velocity: `[u, v, w]` (body frame velocities)
-  - Angular velocity: `[p, q, r]` (body frame angular rates)
-  - Linear acceleration: `[ax, ay, az]` (body frame accelerations)
+  - Orientation error: quaternion vector part `[q_x, q_y, q_z]`
+  - Linear velocity: `[u, v, w]` (body-frame velocities)
+  - Angular velocity: `[p, q, r]` (body-frame angular rates)
 
 - **Control Output**: 6D force/torque commands `[Fx, Fy, Fz, Mx, My, Mz]`
 - **Update Rate**: 50 Hz discrete-time control loop
@@ -103,9 +102,9 @@ roslaunch barracuda_control start_thruster_manager.launch
 
 #### LQR Parameters (`config/lqr_params.yaml`)
 ```yaml
-lqr_controller:
+lqr:
   update_rate: 50.0  # Control loop frequency (Hz)
-  Q: [0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0]  # State weights
+  Q: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]  # State weights
   R: [1, 1, 1, 1, 1, 1]  # Control effort weights
 ```
 
