@@ -103,9 +103,9 @@ roslaunch barracuda_control start_thruster_manager.launch
 
 #### LQR Parameters (`config/lqr_params.yaml`)
 ```yaml
-lqr_controller:
+lqr:
   update_rate: 50.0  # Control loop frequency (Hz)
-  Q: [0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0]  # State weights
+  Q: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]  # State weights
   R: [1, 1, 1, 1, 1, 1]  # Control effort weights
 ```
 
