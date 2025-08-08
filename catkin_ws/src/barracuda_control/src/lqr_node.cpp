@@ -48,8 +48,8 @@ public:
     Eigen::Matrix<double, CONTROL_DIM, CONTROL_DIM> R_mat =
         R_vector.asDiagonal();
 
-    lqr_ = std::make_shared<barracuda_control::AUVLQR>(M_t(0, 0), I_rot, D_t,
-                                                       D_r, dt);
+    lqr_ = std::make_shared<barracuda_control::AUVLQR>(M_t, I_rot, D_t, D_r,
+                                                       dt);
     lqr_->setCostMatrices(Q_mat, R_mat);
 
     // Set up ROS subscribers and publishers.

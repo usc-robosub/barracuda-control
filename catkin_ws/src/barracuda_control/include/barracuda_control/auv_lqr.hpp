@@ -8,7 +8,7 @@ namespace barracuda_control {
 
 class AUVLQR {
 public:
-  AUVLQR(double mass, const Eigen::Matrix3d &inertia,
+  AUVLQR(const Eigen::Matrix3d &M_t, const Eigen::Matrix3d &I_rot,
          const Eigen::Matrix3d &D_t, const Eigen::Matrix3d &D_r, double dt);
 
   void setCostMatrices(const Eigen::Matrix<double, 12, 12> &Q,
@@ -24,8 +24,12 @@ private:
                                      double q0_ref);
   void computeLinearizedInputMatrix();
 
-  double mass_;
-  Eigen::Matrix3d inertia_;
+  static Eigen::Matrix3d skewSymmetric(const Eigen::Vector3d &v);
+
+  Eigen::Matrix3d M_t_;
+  Eigen::Matrix3d I_rot_;
+  Eigen::Matrix3d M_t_inv_;
+  Eigen::Matrix3d I_rot_inv_;
   Eigen::Matrix3d D_t_;
   Eigen::Matrix3d D_r_;
   double dt_;
