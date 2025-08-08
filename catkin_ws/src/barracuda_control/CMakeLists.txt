@@ -126,13 +126,13 @@ catkin_package(
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 include_directories(
-# include
-${catkin_INCLUDE_DIRS}
-${ct_optcon_INCLUDE_DIRS}
-${ct_core_INCLUDE_DIRS}
-${EIGEN3_INCLUDE_DIR}
-${blasfeo_INCLUDE_DIRS}
-${hpipm_INCLUDE_DIRS}
+  include
+  ${catkin_INCLUDE_DIRS}
+  ${ct_optcon_INCLUDE_DIRS}
+  ${ct_core_INCLUDE_DIRS}
+  ${EIGEN3_INCLUDE_DIR}
+  ${blasfeo_INCLUDE_DIRS}
+  ${hpipm_INCLUDE_DIRS}
 )
 
 ## Declare a C++ library
@@ -148,7 +148,7 @@ ${hpipm_INCLUDE_DIRS}
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-add_executable(lqr_node src/lqr_node.cpp)
+add_executable(lqr_node src/lqr_node.cpp src/auv_lqr.cpp)
 add_executable(pid_node src/pid_node.cpp)
 
 ## Rename C++ executable without prefix
