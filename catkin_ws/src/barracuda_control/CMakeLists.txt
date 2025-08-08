@@ -15,6 +15,8 @@ nav_msgs
 message_generation
 std_msgs
 tf
+tf2_ros
+tf2_geometry_msgs
 )
 
 find_package(ct_core REQUIRED)
@@ -115,7 +117,7 @@ generate_messages(
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES barracuda_control
-  CATKIN_DEPENDS message_runtime geometry_msgs nav_msgs std_msgs tf
+  CATKIN_DEPENDS message_runtime geometry_msgs nav_msgs std_msgs tf tf2_ros tf2_geometry_msgs
 #  DEPENDS system_lib
 )
 
