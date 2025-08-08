@@ -3,6 +3,7 @@
 #include <geometry_msgs/Wrench.h>
 #include <nav_msgs/Odometry.h>
 #include <ros/ros.h>
+#include <ros/console.h>
 #include "barracuda_control/SetThrustZero.h"
 
 class PIDNode
@@ -11,6 +12,10 @@ public:
     PIDNode(ros::NodeHandle& nh)
         : nh_(nh), thrust_zero_enabled_(false), last_time_(ros::Time::now())
     {
+        if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Info))
+        {
+            ros::console::notifyLoggerLevelsChanged();
+        }
         nh_.getParam("pid/update_rate", rate_);
         std::vector<double> kp_vals(6), ki_vals(6), kd_vals(6);
         getRosParamVector(nh_, "pid/Kp", kp_vals);
