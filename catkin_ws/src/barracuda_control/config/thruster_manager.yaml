@@ -1,6 +1,5 @@
 thruster_manager:
-  tf_prefix: barracuda
-  base_link: barracuda_link
+  base_link: barracuda_barracuda_link
   thruster_topic_prefix: thrusters/
   thruster_topic_suffix: /input
   thruster_frame_base: thruster_
