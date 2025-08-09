@@ -15,6 +15,8 @@ nav_msgs
 message_generation
 std_msgs
 tf
+tf2_ros
+tf2_geometry_msgs
 )
 
 find_package(ct_core REQUIRED)
@@ -115,7 +117,7 @@ generate_messages(
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES barracuda_control
-  CATKIN_DEPENDS message_runtime geometry_msgs nav_msgs std_msgs tf
+  CATKIN_DEPENDS message_runtime geometry_msgs nav_msgs std_msgs tf tf2_ros tf2_geometry_msgs
 #  DEPENDS system_lib
 )
 
@@ -126,13 +128,13 @@ catkin_package(
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 include_directories(
-# include
-${catkin_INCLUDE_DIRS}
-${ct_optcon_INCLUDE_DIRS}
-${ct_core_INCLUDE_DIRS}
-${EIGEN3_INCLUDE_DIR}
-${blasfeo_INCLUDE_DIRS}
-${hpipm_INCLUDE_DIRS}
+  include
+  ${catkin_INCLUDE_DIRS}
+  ${ct_optcon_INCLUDE_DIRS}
+  ${ct_core_INCLUDE_DIRS}
+  ${EIGEN3_INCLUDE_DIR}
+  ${blasfeo_INCLUDE_DIRS}
+  ${hpipm_INCLUDE_DIRS}
 )
 
 ## Declare a C++ library
@@ -148,7 +150,7 @@ ${hpipm_INCLUDE_DIRS}
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-add_executable(lqr_node src/lqr_node.cpp)
+add_executable(lqr_node src/lqr_node.cpp src/auv_lqr.cpp)
 add_executable(pid_node src/pid_node.cpp)
 
 ## Rename C++ executable without prefix

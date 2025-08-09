@@ -60,6 +60,21 @@ private:
         Eigen::Vector3d angular_error = aa.angle() * aa.axis();
         Eigen::Matrix<double,6,1> e;
         e << linear_error, angular_error;
+        // Log target pose and current pose
+        Eigen::Quaterniond q_target(T_map_target_.rotation());
+        q_target.normalize();
+        Eigen::Quaterniond q_current(T_map_robot_.rotation());
+        q_current.normalize();
+        ROS_INFO_STREAM(
+            "PID target pose - pos: "
+            << T_map_target_.translation().transpose()
+            << ", quat: [" << q_target.w() << ", " << q_target.x() << ", "
+            << q_target.y() << ", " << q_target.z() << "]");
+        ROS_INFO_STREAM(
+            "PID current pose - pos: "
+            << T_map_robot_.translation().transpose()
+            << ", quat: [" << q_current.w() << ", " << q_current.x() << ", "
+            << q_current.y() << ", " << q_current.z() << "]");
         if (dt > 0.0)
         {
             e_integral_ += e * dt;
@@ -169,4 +184,3 @@ int main(int argc, char** argv)
     node.run();
     return 0;
 }
-
