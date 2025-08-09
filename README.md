@@ -61,33 +61,13 @@ Barracuda Control implements a sophisticated 6-DOF optimal control system using 
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/barracuda-control.git
+git clone https://github.com/usc-robosub/barracuda-control.git
 cd barracuda-control
 
 # Build and run with Docker Compose
 docker-compose up --build
 ```
 
-### Manual Installation
-
-```bash
-# Install ROS Noetic and dependencies
-sudo apt-get install ros-noetic-ros-base libeigen3-dev libboost-all-dev liblapack-dev python3-catkin-tools
-
-# Clone and build dependencies
-cd dependencies/blasfeo && mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON
-make -j4 && sudo make install
-
-cd ../../hpipm && mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON
-make -j4 && sudo make install
-
-# Build the ROS workspace
-cd ../../catkin_ws
-catkin build -DCMAKE_BUILD_TYPE=Release
-source devel/setup.bash
-```
 
 ## Usage
 
@@ -121,12 +101,11 @@ thruster_manager:
 
 #### Topics
 - **Subscribed**:
-  - `/odometry/filtered` (nav_msgs/Odometry): Vehicle pose and velocity
-  - `/accel/filtered` (geometry_msgs/AccelStamped): Vehicle acceleration
-  - `/cmd_vel` (geometry_msgs/Twist): Velocity setpoint commands
+  - `/odometry/filtered/global` (nav_msgs/Odometry): Vehicle pose and velocity
+  - `/target_pose` (geometry_msgs/Twist): Velocity setpoint commands
 
 - **Published**:
-  - `/thruster_manager/input` (uuv_gazebo_ros_plugins_msgs/FloatStamped): Force/torque commands
+  - `/thruster_manager/input` (geometry_msgs/WrenchStamped): Force/torque commands
 
 #### Services
 - `/barracuda/set_thrust_zero` (barracuda_control/SetThrustZero): Emergency thrust control
@@ -148,50 +127,6 @@ bool enable_thrust_zero  # true to set thrust to zero, false to resume normal op
 # Response
 bool success             # true if the operation succeeded
 string message           # informational message
-```
-
-### Usage Examples
-
-**Command Line:**
-```bash
-# Emergency stop - disable all thrust
-rosservice call /barracuda/set_thrust_zero "enable_thrust_zero: true"
-
-# Resume normal control
-rosservice call /barracuda/set_thrust_zero "enable_thrust_zero: false"
-```
-
-**Python:**
-```python
-import rospy
-from barracuda_control.srv import SetThrustZero
-
-# Wait for service and create proxy
-rospy.wait_for_service('/barracuda/set_thrust_zero')
-set_thrust_zero = rospy.ServiceProxy('/barracuda/set_thrust_zero', SetThrustZero)
-
-# Emergency stop
-response = set_thrust_zero(enable_thrust_zero=True)
-print(f"Success: {response.success}, Message: {response.message}")
-
-# Resume normal operation
-response = set_thrust_zero(enable_thrust_zero=False)
-```
-
-**C++:**
-```cpp
-#include <ros/ros.h>
-#include <barracuda_control/SetThrustZero.h>
-
-// Create service client
-ros::ServiceClient client = nh.serviceClient<barracuda_control::SetThrustZero>("/barracuda/set_thrust_zero");
-
-// Emergency stop
-barracuda_control::SetThrustZero srv;
-srv.request.enable_thrust_zero = true;
-if (client.call(srv)) {
-    ROS_INFO("Thrust disabled: %s", srv.response.message.c_str());
-}
 ```
 
 ### Behavior
@@ -229,12 +164,6 @@ catkin build -DCMAKE_BUILD_TYPE=Debug
 # Build specific package
 catkin build barracuda_control
 ```
-
-### Contributing
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature-name`
-3. Make your changes and test thoroughly
-4. Submit a pull request
 
 ## UUV Simulator Thruster Manager
 
