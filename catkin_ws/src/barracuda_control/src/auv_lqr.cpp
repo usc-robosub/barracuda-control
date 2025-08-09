@@ -65,6 +65,9 @@ AUVLQR::computeWrench(const Eigen::Matrix<double, 12, 1> &state,
   Eigen::Quaterniond q_state(q0_state, state(3), state(4), state(5));
   Eigen::Quaterniond q_ref(q0_ref, ref(3), ref(4), ref(5));
   Eigen::Quaterniond q_error = q_ref * q_state.conjugate();
+  // Enforce unique quaternion error representation (w >= 0) to avoid sign flips near pi
+  if (q_error.w() < 0.0)
+    q_error.coeffs() *= -1.0;
 
   Eigen::Matrix<double, 12, 1> error;
   error.head<3>() = state.head<3>() - ref.head<3>();
@@ -74,6 +77,7 @@ AUVLQR::computeWrench(const Eigen::Matrix<double, 12, 1> &state,
 
   ct::optcon::LQR<12, 6> solver;
   solver.compute(Q_, R_, A_, B_, K_);
+  // Control wrench is in the body frame
   return -K_ * error;
 }
 

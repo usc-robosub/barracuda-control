@@ -11,6 +11,7 @@
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <tf2_ros/transform_listener.h>
 #include <vector>
+#include <string>
 
 #define STATE_DIM 12
 #define CONTROL_DIM 6
@@ -56,8 +57,20 @@ public:
                                                        dt);
     lqr_->setCostMatrices(Q_mat, R_mat);
 
+    // Resolve target body frame from params (supports optional tf_prefix)
+    nh.param<std::string>("thruster_manager/base_link", base_link_frame_,
+                          std::string("barracuda_link"));
+    std::string tf_prefix;
+    nh.param<std::string>("thruster_manager/tf_prefix", tf_prefix,
+                          std::string(""));
+    if (!tf_prefix.empty()) {
+      target_body_frame_ = tf_prefix + "/" + base_link_frame_;
+    } else {
+      target_body_frame_ = base_link_frame_;
+    }
+
     // Set up ROS subscribers and publishers.
-    odometry_sub = nh.subscribe("odometry/filtered", 1, odometryCallback);
+    odometry_sub = nh.subscribe("odometry/filtered/global", 1, odometryCallback);
     target_odometry_sub =
         nh.subscribe("target_odometry", 1, targetOdometryCallback);
     // Publish the control input
@@ -95,30 +108,38 @@ public:
           Eigen::Map<Eigen::Matrix<double, 12, 1>>(X_);
       Eigen::Matrix<double, 12, 1> X0 =
           Eigen::Map<Eigen::Matrix<double, 12, 1>>(X0_);
+      // Log target pose, current pose, and error (position + orientation vector part)
+      Eigen::Quaterniond q_state(q0_state_, X(3), X(4), X(5));
+      Eigen::Quaterniond q_ref(q0_ref_, X0(3), X0(4), X0(5));
+      q_state.normalize();
+      q_ref.normalize();
+      Eigen::Quaterniond q_error = q_ref * q_state.conjugate();
+      // Enforce unique quaternion error representation (w >= 0) to avoid sign flips near pi
+      if (q_error.w() < 0.0) q_error.coeffs() *= -1.0;
+      ROS_INFO_STREAM(
+          "LQR target pose - pos: " << X0.head<3>().transpose() << ", quat: ["
+                                     << q_ref.w() << ", " << q_ref.x() << ", "
+                                     << q_ref.y() << ", " << q_ref.z() << "]");
+      ROS_INFO_STREAM(
+          "LQR current pose - pos: " << X.head<3>().transpose() << ", quat: ["
+                                     << q_state.w() << ", " << q_state.x()
+                                     << ", " << q_state.y() << ", "
+                                     << q_state.z() << "]");
+      Eigen::Matrix<double, 3, 1> pos_err = X.head<3>() - X0.head<3>();
+      Eigen::Matrix<double, 3, 1> att_err = -q_error.vec();
+      ROS_INFO_STREAM("LQR error - pos: " << pos_err.transpose()
+                                          << ", att_vec: "
+                                          << att_err.transpose());
       Eigen::Matrix<double, 6, 1> U =
           lqr_->computeWrench(X, X0, q0_state_, q0_ref_);
 
-      geometry_msgs::WrenchStamped wrench_map;
-      wrench_map.header.stamp = ros::Time::now();
-      wrench_map.header.frame_id = "map";
-      wrench_map.wrench.force.x = U[0];
-      wrench_map.wrench.force.y = U[1];
-      wrench_map.wrench.force.z = U[2];
-      wrench_map.wrench.torque.x = U[3];
-      wrench_map.wrench.torque.y = U[4];
-      wrench_map.wrench.torque.z = U[5];
-
-      try {
-        geometry_msgs::TransformStamped transform =
-            tf_buffer_.lookupTransform("barracuda/barracuda_link", "map",
-                                       ros::Time(0));
-        geometry_msgs::WrenchStamped wrench_body;
-        tf2::doTransform(wrench_map, wrench_body, transform);
-        control_msg = wrench_body.wrench;
-      } catch (tf2::TransformException &ex) {
-        ROS_WARN("Failed to transform wrench: %s", ex.what());
-        control_msg = wrench_map.wrench;
-      }
+      // The LQR outputs a wrench in the body frame. Publish directly as such.
+      control_msg.force.x = U[0];
+      control_msg.force.y = U[1];
+      control_msg.force.z = U[2];
+      control_msg.torque.x = U[3];
+      control_msg.torque.y = U[4];
+      control_msg.torque.z = U[5];
     }
 
     control_pub.publish(control_msg);
@@ -218,13 +239,19 @@ private:
       } else {
         ROS_ERROR("Incorrect size for %s. Expected 9 but got %d elements.",
                   param_name.c_str(), (int)values.size());
-        matrix = use_identity_default ? Eigen::Matrix3d::Identity()
-                                      : Eigen::Matrix3d::Zero();
+        if (use_identity_default) {
+          matrix.setIdentity();
+        } else {
+          matrix.setZero();
+        }
       }
     } else {
       ROS_WARN("Failed to load matrix: %s, using default.", param_name.c_str());
-      matrix = use_identity_default ? Eigen::Matrix3d::Identity()
-                                    : Eigen::Matrix3d::Zero();
+      if (use_identity_default) {
+        matrix.setIdentity();
+      } else {
+        matrix.setZero();
+      }
     }
   }
 
@@ -236,6 +263,8 @@ private:
   ros::ServiceServer thrust_zero_service;
   tf2_ros::Buffer tf_buffer_;
   tf2_ros::TransformListener tf_listener_;
+  std::string base_link_frame_;
+  std::string target_body_frame_;
 };
 
 double LqrNode::X_[STATE_DIM] = {0};
