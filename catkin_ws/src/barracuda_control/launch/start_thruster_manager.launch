@@ -1,10 +1,4 @@
 <launch>
-  <!-- Name of the robot model  -->
-  <arg name="model_name" default="barracuda"/>
-  <!-- Namespace of the robot in the simulation (it can be different from the original model name) -->
-  <arg name="uuv_name" default="$(arg model_name)"/>
-  <!-- Name of the base link -->
-  <arg name="base_link" default="base_link" />
   <!--
     Thruster manager timeout.
     If no wrench topic is received in the thruster
@@ -13,7 +7,6 @@
     If the timeout is set to -1, the latest received input is always going to
     be redistributed to the thruster units.
   -->
-  <arg name="timeout" default="-1" />
   <!--
     In case the TAM.yaml must be generated or updated, you can set this flag to
     true. The thruster allocation matrix is stored in a file because the
@@ -37,18 +30,18 @@
   <!-- Thruster allocation matrix file path -->
   <arg name="tam_file" default="$(find barracuda_control)/config/TAM.yaml"/>
 
-  <rosparam command="load" file="$(find barracuda_control)/config/lqr_params.yaml" ns="$(arg model_name)"/>
+  <rosparam command="load" file="$(find barracuda_control)/config/lqr_params.yaml" ns="barracuda"/>
 
-  <include file="$(find uuv_thruster_manager)/launch/thruster_manager.launch">
-    <arg name="model_name" value="$(arg model_name)"/>
-    <arg name="uuv_name" value="$(arg uuv_name)"/>
-    <arg name="base_link" value="$(arg base_link)"/>
-    <arg name="timeout" value="$(arg timeout)"/>
+  <include file="$(find barracuda_control)/launch/thruster_manager.launch">
+    <arg name="model_name" value=""/>
+    <arg name="uuv_name" value=""/>
+    <arg name="base_link" value="barracuda_base_link"/>
+    <arg name="timeout" value="-1"/>
     <arg name="reset_tam" value="$(arg reset_tam)"/>
     <arg name="output_dir" value="$(arg output_dir)"/>
     <arg name="config_file" value="$(arg config_file)"/>
     <arg name="tam_file" value="$(arg tam_file)"/>
    </include>
 
-   <node pkg="barracuda_control" name="lqr_node" type="lqr_node" ns="$(arg model_name)"/>
+   <node pkg="barracuda_control" name="lqr_node" type="lqr_node" ns="barracuda"/>
 </launch>

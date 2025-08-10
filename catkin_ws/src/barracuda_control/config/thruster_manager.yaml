@@ -2,7 +2,7 @@ thruster_manager:
   base_link: barracuda_barracuda_link
   thruster_topic_prefix: thrusters/
   thruster_topic_suffix: /input
-  thruster_frame_base: thruster_
+  thruster_frame_base: barracuda_thruster_
   max_thrust: 19.6 # 2 kg/f
   timeout: -1
   update_rate: 50
