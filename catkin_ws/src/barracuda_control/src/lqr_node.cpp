@@ -70,7 +70,7 @@ public:
     }
 
     // Set up ROS subscribers and publishers.
-    odometry_sub = nh.subscribe("odometry/filtered/global", 1, odometryCallback);
+    odometry_sub = nh.subscribe("odometry/filtered/local", 1, odometryCallback);
     target_odometry_sub =
         nh.subscribe("target_odometry", 1, targetOdometryCallback);
     // Publish the control input

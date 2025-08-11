@@ -101,7 +101,7 @@ thruster_manager:
 
 #### Topics
 - **Subscribed**:
-  - `/odometry/filtered/global` (nav_msgs/Odometry): Vehicle pose and velocity
+  - `/odometry/filtered/local` (nav_msgs/Odometry): Vehicle pose and velocity
   - `/target_pose` (geometry_msgs/Twist): Velocity setpoint commands
 
 - **Published**:
