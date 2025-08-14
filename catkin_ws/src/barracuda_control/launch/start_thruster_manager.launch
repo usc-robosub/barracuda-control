@@ -43,5 +43,5 @@
     <arg name="tam_file" value="$(arg tam_file)"/>
    </include>
 
-   <node pkg="barracuda_control" name="lqr_node" type="lqr_node" ns="barracuda"/>
+   <!-- <node pkg="barracuda_control" name="lqr_node" type="lqr_node" ns="barracuda"/> -->
 </launch>
