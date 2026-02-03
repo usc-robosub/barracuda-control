@@ -1,22 +1,23 @@
-#include "barracuda_control/SetThrustZero.h"
+#include "barracuda_control/srv/set_thrust_zero.hpp"
 #include "barracuda_control/auv_lqr.hpp"
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
-#include <geometry_msgs/Twist.h>
-#include <geometry_msgs/Wrench.h>
-#include <geometry_msgs/WrenchStamped.h>
+#include <geometry_msgs/msg/twist.hpp>
+#include <geometry_msgs/msg/wrench.hpp>
+#include <geometry_msgs/msg/wrench_stamped.hpp>
 #include <memory>
-#include <nav_msgs/Odometry.h>
-#include <ros/ros.h>
-#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
+#include <nav_msgs/msg/odometry.hpp>
+#include <rclcpp/rclcpp.hpp>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include <tf2_ros/transform_listener.h>
+#include <tf2_ros/buffer.h>
 #include <vector>
 #include <string>
 
 #define STATE_DIM 12
 #define CONTROL_DIM 6
 
-class LqrNode {
+class LqrNode : public rclcpp::Node {
 public:
   static double X_[STATE_DIM];
   static double X0_[STATE_DIM];
@@ -25,11 +26,13 @@ public:
   int rate;
   bool thrust_zero_enabled;
 
-  LqrNode(ros::NodeHandle &nh)
-      : nh_(nh), thrust_zero_enabled(false), tf_listener_(tf_buffer_) {
-    ROS_INFO("Discrete-time LQR Node initialized and running.");
+  LqrNode()
+      : Node("lqr_node"), thrust_zero_enabled(false), tf_buffer_(this->get_clock()), 
+        tf_listener_(tf_buffer_) {
+    RCLCPP_INFO(this->get_logger(), "Discrete-time LQR Node initialized and running.");
     double dt;
-    nh.getParam("lqr/update_rate", rate);
+    this->declare_parameter("lqr.update_rate", 50);
+    rate = this->get_parameter("lqr.update_rate").as_int();
     dt = 1.0 / rate;
 
     // Vehicle physical parameters. Defaults are identity/zero but can be
@@ -38,16 +41,16 @@ public:
     Eigen::Matrix3d I_rot = Eigen::Matrix3d::Identity(); // rotational inertia
     Eigen::Matrix3d D_t = Eigen::Matrix3d::Zero(); // translational damping
     Eigen::Matrix3d D_r = Eigen::Matrix3d::Zero(); // rotational damping
-    getRosParamMatrix(nh, "lqr/M_t", M_t, true);
-    getRosParamMatrix(nh, "lqr/I_rot", I_rot, true);
-    getRosParamMatrix(nh, "lqr/D_t", D_t, false);
-    getRosParamMatrix(nh, "lqr/D_r", D_r, false);
+    getRosParamMatrix("lqr.M_t", M_t, true);
+    getRosParamMatrix("lqr.I_rot", I_rot, true);
+    getRosParamMatrix("lqr.D_t", D_t, false);
+    getRosParamMatrix("lqr.D_r", D_r, false);
 
     // Load the weighting matrices Q and R from ROS parameters.
     Eigen::VectorXd Q_vector = Eigen::VectorXd(STATE_DIM);
     Eigen::VectorXd R_vector = Eigen::VectorXd(CONTROL_DIM);
-    getRosParamVector(nh, "lqr/Q", Q_vector, STATE_DIM);
-    getRosParamVector(nh, "lqr/R", R_vector, CONTROL_DIM);
+    getRosParamVector("lqr.Q", Q_vector, STATE_DIM);
+    getRosParamVector("lqr.R", R_vector, CONTROL_DIM);
 
     Eigen::Matrix<double, STATE_DIM, STATE_DIM> Q_mat = Q_vector.asDiagonal();
     Eigen::Matrix<double, CONTROL_DIM, CONTROL_DIM> R_mat =
@@ -58,11 +61,11 @@ public:
     lqr_->setCostMatrices(Q_mat, R_mat);
 
     // Resolve target body frame from params (supports optional tf_prefix)
-    nh.param<std::string>("thruster_manager/base_link", base_link_frame_,
-                          std::string("barracuda_link"));
-    std::string tf_prefix;
-    nh.param<std::string>("thruster_manager/tf_prefix", tf_prefix,
-                          std::string(""));
+    this->declare_parameter("thruster_manager.base_link", "barracuda_link");
+    this->declare_parameter("thruster_manager.tf_prefix", "");
+    base_link_frame_ = this->get_parameter("thruster_manager.base_link").as_string();
+    std::string tf_prefix = this->get_parameter("thruster_manager.tf_prefix").as_string();
+    
     if (!tf_prefix.empty()) {
       target_body_frame_ = tf_prefix + "/" + base_link_frame_;
     } else {
@@ -70,31 +73,37 @@ public:
     }
 
     // Set up ROS subscribers and publishers.
-    odometry_sub = nh.subscribe("odometry/filtered/local", 1, odometryCallback);
-    target_odometry_sub =
-        nh.subscribe("target_odometry", 1, targetOdometryCallback);
+    odometry_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
+        "odometry/filtered/local", 10,
+        std::bind(&LqrNode::odometryCallback, this, std::placeholders::_1));
+    
+    target_odometry_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
+        "target_odometry", 10,
+        std::bind(&LqrNode::targetOdometryCallback, this, std::placeholders::_1));
+    
     // Publish the control input
-    control_pub =
-        nh.advertise<geometry_msgs::Wrench>("thruster_manager/input", 1);
+    control_pub_ = this->create_publisher<geometry_msgs::msg::Wrench>(
+        "thruster_manager/input", 10);
 
     // Set up service server for thrust zero control
-    thrust_zero_service = nh.advertiseService(
-        "set_thrust_zero", &LqrNode::setThrustZeroCallback, this);
+    thrust_zero_service_ = this->create_service<barracuda_control::srv::SetThrustZero>(
+        "set_thrust_zero",
+        std::bind(&LqrNode::setThrustZeroCallback, this,
+                  std::placeholders::_1, std::placeholders::_2));
+    
+    // Create timer for control loop
+    timer_ = this->create_wall_timer(
+        std::chrono::milliseconds(1000 / rate),
+        std::bind(&LqrNode::controlLoop, this));
   }
 
-  void run() // main loop
-  {
-    ros::Rate loop_rate(rate);
-    while (ros::ok()) {
-      computeLqr();
-      publishControl();
-      ros::spinOnce();
-      loop_rate.sleep();
-    }
+  void controlLoop() {
+    computeLqr();
+    publishControl();
   }
 
   void publishControl() {
-    geometry_msgs::Wrench control_msg;
+    auto control_msg = geometry_msgs::msg::Wrench();
 
     if (thrust_zero_enabled) {
       control_msg.force.x = 0.0;
@@ -116,18 +125,18 @@ public:
       Eigen::Quaterniond q_error = q_ref * q_state.conjugate();
       // Enforce unique quaternion error representation (w >= 0) to avoid sign flips near pi
       if (q_error.w() < 0.0) q_error.coeffs() *= -1.0;
-      ROS_INFO_STREAM(
+      RCLCPP_INFO_STREAM(this->get_logger(),
           "LQR target pose - pos: " << X0.head<3>().transpose() << ", quat: ["
                                      << q_ref.w() << ", " << q_ref.x() << ", "
                                      << q_ref.y() << ", " << q_ref.z() << "]");
-      ROS_INFO_STREAM(
+      RCLCPP_INFO_STREAM(this->get_logger(),
           "LQR current pose - pos: " << X.head<3>().transpose() << ", quat: ["
                                      << q_state.w() << ", " << q_state.x()
                                      << ", " << q_state.y() << ", "
                                      << q_state.z() << "]");
       Eigen::Matrix<double, 3, 1> pos_err = X.head<3>() - X0.head<3>();
       Eigen::Matrix<double, 3, 1> att_err = -q_error.vec();
-      ROS_INFO_STREAM("LQR error - pos: " << pos_err.transpose()
+      RCLCPP_INFO_STREAM(this->get_logger(), "LQR error - pos: " << pos_err.transpose()
                                           << ", att_vec: "
                                           << att_err.transpose());
       Eigen::Matrix<double, 6, 1> U =
@@ -142,10 +151,10 @@ public:
       control_msg.torque.z = U[5];
     }
 
-    control_pub.publish(control_msg);
+    control_pub_->publish(control_msg);
   }
 
-  static void targetOdometryCallback(const nav_msgs::Odometry::ConstPtr &msg) {
+  void targetOdometryCallback(const nav_msgs::msg::Odometry::SharedPtr msg) {
     X0_[0] = msg->pose.pose.position.x;
     X0_[1] = msg->pose.pose.position.y;
     X0_[2] = msg->pose.pose.position.z;
@@ -167,7 +176,7 @@ public:
     X0_[11] = msg->twist.twist.angular.z;
   }
 
-  static void odometryCallback(const nav_msgs::Odometry::ConstPtr &msg) {
+  void odometryCallback(const nav_msgs::msg::Odometry::SharedPtr msg) {
     X_[0] = msg->pose.pose.position.x;
     X_[1] = msg->pose.pose.position.y;
     X_[2] = msg->pose.pose.position.z;
@@ -193,60 +202,49 @@ public:
     // LQR gain computed internally by controller
   }
 
-  bool setThrustZeroCallback(barracuda_control::SetThrustZero::Request &req,
-                             barracuda_control::SetThrustZero::Response &res) {
-    thrust_zero_enabled = req.enable_thrust_zero;
-    res.success = true;
+  void setThrustZeroCallback(
+      const std::shared_ptr<barracuda_control::srv::SetThrustZero::Request> request,
+      std::shared_ptr<barracuda_control::srv::SetThrustZero::Response> response) {
+    thrust_zero_enabled = request->enable_thrust_zero;
+    response->success = true;
 
     if (thrust_zero_enabled) {
-      res.message = "Thrust set to zero - all thrusters disabled";
-      ROS_INFO("Thrust zero enabled - all thrusters set to zero");
+      response->message = "Thrust set to zero - all thrusters disabled";
+      RCLCPP_INFO(this->get_logger(), "Thrust zero enabled - all thrusters set to zero");
     } else {
-      res.message = "Normal LQR control resumed";
-      ROS_INFO("Thrust zero disabled - normal LQR control resumed");
+      response->message = "Normal LQR control resumed";
+      RCLCPP_INFO(this->get_logger(), "Thrust zero disabled - normal LQR control resumed");
     }
-
-    return true;
   }
 
 private:
-  void getRosParamVector(ros::NodeHandle &nh, const std::string &param_name,
+  void getRosParamVector(const std::string &param_name,
                          Eigen::VectorXd &vector, int size) {
-    std::vector<double> values;
-    if (nh.getParam(param_name, values)) {
-      if (values.size() == size) {
-        vector = Eigen::Map<Eigen::VectorXd>(values.data(), size);
-        ROS_INFO("Loaded vector %s from ROS parameters.", param_name.c_str());
-      } else {
-        ROS_ERROR("Incorrect size for %s. Expected %d but got %d elements.",
-                  param_name.c_str(), size, (int)values.size());
-        vector = Eigen::VectorXd::Zero(size);
-      }
+    this->declare_parameter(param_name, std::vector<double>(size, 0.0));
+    std::vector<double> values = this->get_parameter(param_name).as_double_array();
+    
+    if (values.size() == static_cast<size_t>(size)) {
+      vector = Eigen::Map<Eigen::VectorXd>(values.data(), size);
+      RCLCPP_INFO(this->get_logger(), "Loaded vector %s from ROS parameters.", param_name.c_str());
     } else {
-      ROS_ERROR("Failed to load vector: %s", param_name.c_str());
+      RCLCPP_ERROR(this->get_logger(), "Incorrect size for %s. Expected %d but got %zu elements.",
+                param_name.c_str(), size, values.size());
       vector = Eigen::VectorXd::Zero(size);
     }
   }
 
-  void getRosParamMatrix(ros::NodeHandle &nh, const std::string &param_name,
+  void getRosParamMatrix(const std::string &param_name,
                          Eigen::Matrix3d &matrix, bool use_identity_default) {
-    std::vector<double> values;
-    if (nh.getParam(param_name, values)) {
-      if (values.size() == 9) {
-        matrix = Eigen::Map<Eigen::Matrix<double, 3, 3, Eigen::RowMajor>>(
-            values.data());
-        ROS_INFO("Loaded matrix %s from ROS parameters.", param_name.c_str());
-      } else {
-        ROS_ERROR("Incorrect size for %s. Expected 9 but got %d elements.",
-                  param_name.c_str(), (int)values.size());
-        if (use_identity_default) {
-          matrix.setIdentity();
-        } else {
-          matrix.setZero();
-        }
-      }
+    this->declare_parameter(param_name, std::vector<double>(9, use_identity_default ? 1.0 : 0.0));
+    std::vector<double> values = this->get_parameter(param_name).as_double_array();
+    
+    if (values.size() == 9) {
+      matrix = Eigen::Map<Eigen::Matrix<double, 3, 3, Eigen::RowMajor>>(
+          values.data());
+      RCLCPP_INFO(this->get_logger(), "Loaded matrix %s from ROS parameters.", param_name.c_str());
     } else {
-      ROS_WARN("Failed to load matrix: %s, using default.", param_name.c_str());
+      RCLCPP_ERROR(this->get_logger(), "Incorrect size for %s. Expected 9 but got %zu elements.",
+                param_name.c_str(), values.size());
       if (use_identity_default) {
         matrix.setIdentity();
       } else {
@@ -255,12 +253,12 @@ private:
     }
   }
 
-  ros::NodeHandle &nh_;
   std::shared_ptr<barracuda_control::AUVLQR> lqr_;
-  ros::Publisher control_pub;
-  ros::Subscriber odometry_sub;
-  ros::Subscriber target_odometry_sub;
-  ros::ServiceServer thrust_zero_service;
+  rclcpp::Publisher<geometry_msgs::msg::Wrench>::SharedPtr control_pub_;
+  rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odometry_sub_;
+  rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr target_odometry_sub_;
+  rclcpp::Service<barracuda_control::srv::SetThrustZero>::SharedPtr thrust_zero_service_;
+  rclcpp::TimerBase::SharedPtr timer_;
   tf2_ros::Buffer tf_buffer_;
   tf2_ros::TransformListener tf_listener_;
   std::string base_link_frame_;
@@ -273,11 +271,9 @@ double LqrNode::q0_state_ = 1.0;
 double LqrNode::q0_ref_ = 1.0;
 
 int main(int argc, char **argv) {
-  ros::init(argc, argv, "lqr_node");
-  ros::NodeHandle nh;
-
-  LqrNode lqr_node(nh);
-  lqr_node.run();
-
+  rclcpp::init(argc, argv);
+  auto node = std::make_shared<LqrNode>();
+  rclcpp::spin(node);
+  rclcpp::shutdown();
   return 0;
 }

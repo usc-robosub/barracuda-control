@@ -1,26 +1,22 @@
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
-#include <geometry_msgs/Wrench.h>
-#include <nav_msgs/Odometry.h>
-#include <ros/ros.h>
-#include <ros/console.h>
-#include "barracuda_control/SetThrustZero.h"
+#include <geometry_msgs/msg/wrench.hpp>
+#include <nav_msgs/msg/odometry.hpp>
+#include <rclcpp/rclcpp.hpp>
+#include "barracuda_control/srv/set_thrust_zero.hpp"
 
-class PIDNode
+class PIDNode : public rclcpp::Node
 {
 public:
-    PIDNode(ros::NodeHandle& nh)
-        : nh_(nh), thrust_zero_enabled_(false), last_time_(ros::Time::now())
+    PIDNode()
+        : Node("pid_node"), thrust_zero_enabled_(false)
     {
-        if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Info))
-        {
-            ros::console::notifyLoggerLevelsChanged();
-        }
-        nh_.getParam("pid/update_rate", rate_);
+        this->declare_parameter("pid.update_rate", 50);
+        rate_ = this->get_parameter("pid.update_rate").as_int();
         std::vector<double> kp_vals(6), ki_vals(6), kd_vals(6);
-        getRosParamVector(nh_, "pid/Kp", kp_vals);
-        getRosParamVector(nh_, "pid/Ki", ki_vals);
-        getRosParamVector(nh_, "pid/Kd", kd_vals);
+        getRosParamVector("pid.Kp", kp_vals);
+        getRosParamVector("pid.Ki", ki_vals);
+        getRosParamVector("pid.Kd", kd_vals);
         Kp_ = Eigen::Map<Eigen::Matrix<double,6,1>>(kp_vals.data()).asDiagonal();
         Ki_ = Eigen::Map<Eigen::Matrix<double,6,1>>(ki_vals.data()).asDiagonal();
         Kd_ = Eigen::Map<Eigen::Matrix<double,6,1>>(kd_vals.data()).asDiagonal();
@@ -28,29 +24,34 @@ public:
         e_prev_.setZero();
         T_map_robot_.setIdentity();
         T_map_target_.setIdentity();
-        control_pub_ = nh_.advertise<geometry_msgs::Wrench>("thruster_manager/input", 1);
-        odom_sub_ = nh_.subscribe("odometry/filtered/local", 1, &PIDNode::odometryCallback, this);
-        target_sub_ = nh_.subscribe("target_odometry", 1, &PIDNode::targetCallback, this);
-        thrust_zero_srv_ = nh_.advertiseService("set_thrust_zero", &PIDNode::setThrustZeroCallback, this);
-    }
-
-    void run()
-    {
-        ros::Rate loop_rate(rate_);
-        while (ros::ok())
-        {
-            computeControl();
-            publishControl();
-            ros::spinOnce();
-            loop_rate.sleep();
-        }
+        last_time_ = this->now();
+        control_pub_ = this->create_publisher<geometry_msgs::msg::Wrench>("thruster_manager/input", 10);
+        odom_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
+            "odometry/filtered/local", 10,
+            std::bind(&PIDNode::odometryCallback, this, std::placeholders::_1));
+        target_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
+            "target_odometry", 10,
+            std::bind(&PIDNode::targetCallback, this, std::placeholders::_1));
+        thrust_zero_srv_ = this->create_service<barracuda_control::srv::SetThrustZero>(
+            "set_thrust_zero",
+            std::bind(&PIDNode::setThrustZeroCallback, this,
+                      std::placeholders::_1, std::placeholders::_2));
+        timer_ = this->create_wall_timer(
+            std::chrono::milliseconds(1000 / rate_),
+            std::bind(&PIDNode::controlLoop, this));
     }
 
 private:
+    void controlLoop()
+    {
+        computeControl();
+        publishControl();
+    }
+
     void computeControl()
     {
-        ros::Time now = ros::Time::now();
-        double dt = (now - last_time_).toSec();
+        rclcpp::Time now = this->now();
+        double dt = (now - last_time_).seconds();
         last_time_ = now;
         Eigen::Isometry3d T_error = T_map_robot_.inverse() * T_map_target_;
         Eigen::Vector3d linear_error = T_error.translation();
@@ -65,12 +66,12 @@ private:
         q_target.normalize();
         Eigen::Quaterniond q_current(T_map_robot_.rotation());
         q_current.normalize();
-        ROS_INFO_STREAM(
+        RCLCPP_INFO_STREAM(this->get_logger(),
             "PID target pose - pos: "
             << T_map_target_.translation().transpose()
             << ", quat: [" << q_target.w() << ", " << q_target.x() << ", "
             << q_target.y() << ", " << q_target.z() << "]");
-        ROS_INFO_STREAM(
+        RCLCPP_INFO_STREAM(this->get_logger(),
             "PID current pose - pos: "
             << T_map_robot_.translation().transpose()
             << ", quat: [" << q_current.w() << ", " << q_current.x() << ", "
@@ -82,13 +83,13 @@ private:
         }
         e_prev_ = e;
         control_ = Kp_ * e + Ki_ * e_integral_ + Kd_ * e_derivative_;
-        ROS_INFO_STREAM("PID error: " << e.transpose());
-        ROS_INFO_STREAM("PID output: " << control_.transpose());
+        RCLCPP_INFO_STREAM(this->get_logger(), "PID error: " << e.transpose());
+        RCLCPP_INFO_STREAM(this->get_logger(), "PID output: " << control_.transpose());
     }
 
     void publishControl()
     {
-        geometry_msgs::Wrench msg;
+        auto msg = geometry_msgs::msg::Wrench();
         if (thrust_zero_enabled_)
         {
             msg.force.x = msg.force.y = msg.force.z = 0.0;
@@ -103,10 +104,10 @@ private:
             msg.torque.y = control_[4];
             msg.torque.z = control_[5];
         }
-        control_pub_.publish(msg);
+        control_pub_->publish(msg);
     }
 
-    void odometryCallback(const nav_msgs::Odometry::ConstPtr& msg)
+    void odometryCallback(const nav_msgs::msg::Odometry::SharedPtr msg)
     {
         Eigen::Quaterniond q(msg->pose.pose.orientation.w,
                               msg->pose.pose.orientation.x,
@@ -120,7 +121,7 @@ private:
             msg->pose.pose.position.z);
     }
 
-    void targetCallback(const nav_msgs::Odometry::ConstPtr& msg)
+    void targetCallback(const nav_msgs::msg::Odometry::SharedPtr msg)
     {
         Eigen::Quaterniond q(msg->pose.pose.orientation.w,
                               msg->pose.pose.orientation.x,
@@ -134,34 +135,31 @@ private:
             msg->pose.pose.position.z);
     }
 
-    bool setThrustZeroCallback(barracuda_control::SetThrustZero::Request& req,
-                               barracuda_control::SetThrustZero::Response& res)
+    void setThrustZeroCallback(
+        const std::shared_ptr<barracuda_control::srv::SetThrustZero::Request> request,
+        std::shared_ptr<barracuda_control::srv::SetThrustZero::Response> response)
     {
-        thrust_zero_enabled_ = req.enable_thrust_zero;
-        res.success = true;
-        res.message = thrust_zero_enabled_ ? "Thrust zero enabled" : "Thrust zero disabled";
-        return true;
+        thrust_zero_enabled_ = request->enable_thrust_zero;
+        response->success = true;
+        response->message = thrust_zero_enabled_ ? "Thrust zero enabled" : "Thrust zero disabled";
     }
 
-    void getRosParamVector(ros::NodeHandle& nh, const std::string& name, std::vector<double>& vec)
+    void getRosParamVector(const std::string& name, std::vector<double>& vec)
     {
-        if (!nh.getParam(name, vec))
-        {
-            vec.assign(6, 0.0);
-            ROS_WARN("Failed to load %s, using zeros", name.c_str());
-        }
-        else if (vec.size() != 6)
+        this->declare_parameter(name, std::vector<double>(6, 0.0));
+        vec = this->get_parameter(name).as_double_array();
+        if (vec.size() != 6)
         {
             vec.resize(6, 0.0);
-            ROS_WARN("%s should have 6 elements", name.c_str());
+            RCLCPP_WARN(this->get_logger(), "%s should have 6 elements", name.c_str());
         }
     }
 
-    ros::NodeHandle nh_;
-    ros::Publisher control_pub_;
-    ros::Subscriber odom_sub_;
-    ros::Subscriber target_sub_;
-    ros::ServiceServer thrust_zero_srv_;
+    rclcpp::Publisher<geometry_msgs::msg::Wrench>::SharedPtr control_pub_;
+    rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_sub_;
+    rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr target_sub_;
+    rclcpp::Service<barracuda_control::srv::SetThrustZero>::SharedPtr thrust_zero_srv_;
+    rclcpp::TimerBase::SharedPtr timer_;
     int rate_;
     bool thrust_zero_enabled_;
     Eigen::Matrix<double,6,6> Kp_;
@@ -173,14 +171,14 @@ private:
     Eigen::Matrix<double,6,1> control_;
     Eigen::Isometry3d T_map_robot_;
     Eigen::Isometry3d T_map_target_;
-    ros::Time last_time_;
+    rclcpp::Time last_time_;
 };
 
 int main(int argc, char** argv)
 {
-    ros::init(argc, argv, "pid_node");
-    ros::NodeHandle nh;
-    PIDNode node(nh);
-    node.run();
+    rclcpp::init(argc, argv);
+    auto node = std::make_shared<PIDNode>();
+    rclcpp::spin(node);
+    rclcpp::shutdown();
     return 0;
 }

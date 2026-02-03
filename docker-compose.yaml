@@ -6,5 +6,9 @@ services:
     container_name: barracuda-control
     tty: true
     network_mode: host
+    ipc: host
+    pid: host
+    environment:
+      - ROS_DOMAIN_ID=0
     volumes:
       - $HOME/.ssh:/root/.ssh

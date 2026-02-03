@@ -1,14 +1,14 @@
-FROM ros:noetic-ros-base-focal
+FROM ros:humble-ros-base-jammy
 
 # Install build and ROS dependencies
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
        git vim wget \
        libeigen3-dev libboost-all-dev liblapack-dev \
-       python3-catkin-tools doxygen \
-       ros-noetic-tf ros-noetic-tf2 ros-noetic-tf2-ros ros-noetic-tf2-geometry-msgs \
-       ros-noetic-geometry-msgs ros-noetic-nav-msgs \
-       ros-noetic-message-generation ros-noetic-message-runtime \
+       python3-colcon-common-extensions doxygen \
+       ros-humble-tf2 ros-humble-tf2-ros ros-humble-tf2-geometry-msgs \
+       ros-humble-geometry-msgs ros-humble-nav-msgs \
+       ros-humble-sensor-msgs \
     && rm -rf /var/lib/apt/lists/*
 
 COPY . /opt/barracuda-control
@@ -17,7 +17,7 @@ COPY . /opt/barracuda-control
 WORKDIR /opt
 
 
-RUN . /opt/ros/noetic/setup.sh && \
+RUN . /opt/ros/humble/setup.sh && \
     cd /opt/barracuda-control/dependencies/blasfeo && \
     mkdir build && cd build && \
     cmake .. \
@@ -36,7 +36,7 @@ RUN . /opt/ros/noetic/setup.sh && \
     make -j4 && make install -j && \
     ldconfig && \
     cd /opt/barracuda-control/catkin_ws && \
-    catkin build -DCMAKE_BUILD_TYPE=Release
+    colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release --packages-select thruster_manager
 
 # Source the workspace on container start
 CMD ["/bin/bash", "/opt/barracuda-control/entrypoint.sh"]
