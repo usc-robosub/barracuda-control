@@ -1,9 +1,5 @@
 #!/usr/bin/bash
-source /opt/ros/noetic/setup.bash
-source /opt/barracuda-control/catkin_ws/devel/setup.bash
-
-echo "source /opt/ros/noetic/setup.bash" >> ~/.bashrc
-echo "source /opt/barracuda-control/catkin_ws/devel/setup.bash" >> ~/.bashrc
-
-
-roslaunch barracuda_control start_thruster_manager.launch --wait
+source /opt/ros/humble/setup.bash
+source /opt/barracuda-control/dev_ws/install/setup.bash
+ros2 launch barracuda_control joystick_wrench_controller.launch.py
+# ros2 launch foxglove_bridge foxglove_bridge_launch.xml 

@@ -16,3 +16,10 @@
 [submodule "dependencies/hpipm"]
 	path = dependencies/hpipm
 	url = https://github.com/giaf/hpipm
+[submodule "dev_ws/src/thruster_manager"]
+	path = dev_ws/src/thruster_manager
+	url = git@github.com:CentraleNantesROV/thruster_manager.git
+[submodule "dev_ws/src/barracuda_description"]
+	path = dev_ws/src/barracuda_description
+	url = git@github.com:usc-robosub/barracuda_description.git
+	branch = ros2-rsp

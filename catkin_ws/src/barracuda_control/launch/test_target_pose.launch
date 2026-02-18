@@ -1,7 +1,0 @@
-<launch>
-  <!-- Load LQR and target pose parameters -->
-  <rosparam command="load" file="$(find barracuda_control)/config/lqr_params.yaml"/>
-
-  <!-- Publish a target pose for testing -->
-  <node pkg="barracuda_control" type="test_target_pose.py" name="test_target_pose" output="screen"/>
-</launch>

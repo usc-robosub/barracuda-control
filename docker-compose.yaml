@@ -4,7 +4,11 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: barracuda-control
+    user: root
+    privileged: true
     tty: true
     network_mode: host
+    ports:
+      - 8765:8765
     volumes:
-      - $HOME/.ssh:/root/.ssh
+      - ${PWD}:/opt/barracuda-control
