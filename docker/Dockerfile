@@ -14,7 +14,7 @@ RUN rosdep update
 WORKDIR /ros2_ws
 
 COPY barracuda_control /ros2_ws/src/barracuda_control
-COPY thruster_manager /ros2_ws/thruster_manager
+COPY thruster_manager /ros2_ws/src/thruster_manager
 
 COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
