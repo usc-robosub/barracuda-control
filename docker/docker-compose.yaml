@@ -9,8 +9,6 @@ services:
     privileged: true
     tty: true
     network_mode: host
-    ports:
-      - 8765:8765
     volumes:
       - ${HOME}/.ssh:/root/.ssh
   barracuda-control-dev:
@@ -23,8 +21,6 @@ services:
     container_name: barracuda-control-dev
     tty: true
     network_mode: host
-    ports:
-      - 8766:8765
     volumes:
       - ${HOME}/.ssh:/root/.ssh
       - ${HOME}/.gitconfig:/root/.gitconfig
