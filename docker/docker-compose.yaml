@@ -1,8 +1,9 @@
 services:
   barracuda-control:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: barracuda-control
     container_name: barracuda-control
     user: root
     privileged: true
@@ -11,4 +12,22 @@ services:
     ports:
       - 8765:8765
     volumes:
-      - ${PWD}:/opt/barracuda-control
+      - ${HOME}/.ssh:/root/.ssh
+  barracuda-control-dev:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    user: root
+    privileged: true
+    image: barracuda-control-dev
+    container_name: barracuda-control-dev
+    tty: true
+    network_mode: host
+    ports:
+      - 8766:8765
+    volumes:
+      - ${HOME}/.ssh:/root/.ssh
+      - ${HOME}/.gitconfig:/root/.gitconfig
+      - ${HOME}/.vimrc:/root/.vimrc
+      - ../barracuda_control:/ros2_ws/src/barracuda_control
+    profiles: ["dev"]
