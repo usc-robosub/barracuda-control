@@ -48,15 +48,6 @@ def generate_launch_description():
                     ]
                 ),
             ),
-            IncludeLaunchDescription(
-                PathJoinSubstitution(
-                    [
-                        FindPackageShare("barracuda_description"),
-                        "launch",
-                        "rsp.launch.py",
-                    ]
-                ),
-            ),
             node_thruster_manager,
             node_joystick_to_wrench,
         ]
