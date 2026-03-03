@@ -9,6 +9,7 @@ services:
     privileged: true
     tty: true
     network_mode: host
+    ipc: host
     volumes:
       - ${HOME}/.ssh:/root/.ssh
   barracuda-control-dev:
@@ -21,6 +22,7 @@ services:
     container_name: barracuda-control-dev
     tty: true
     network_mode: host
+    ipc: host
     volumes:
       - ${HOME}/.ssh:/root/.ssh
       - ${HOME}/.gitconfig:/root/.gitconfig
