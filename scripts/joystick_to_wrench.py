@@ -19,8 +19,11 @@ class JoystickToWrench(Node):
         self.wrench_publisher = self.create_publisher(Wrench, "wrench", 10)
 
     def joy_subscriber_callback(self, msg):
-        wrench = Wrench()
+        if not msg.axes or not msg.buttons:
+            self.get_logger().warning("malformatted joy message")
+            return
 
+        wrench = Wrench()
         force = (
             msg.axes[1],
             -msg.axes[0],
