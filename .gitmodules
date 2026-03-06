@@ -16,6 +16,3 @@
 [submodule "dependencies/hpipm"]
 	path = dependencies/hpipm
 	url = https://github.com/giaf/hpipm
-[submodule "dev_ws/src/thruster_manager"]
-	path = thruster_manager
-	url = git@github.com:CentraleNantesROV/thruster_manager.git
