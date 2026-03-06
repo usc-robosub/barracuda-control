@@ -4,6 +4,7 @@ from geometry_msgs.msg import Vector3, Wrench
 from rclpy.node import Node
 from sensor_msgs.msg import Joy
 
+AXES_DEADZONE = 0.025
 MAX_FORCE = 4
 MAX_TORQUE = 4
 
@@ -24,9 +25,11 @@ class JoystickToWrench(Node):
             return
 
         wrench = Wrench()
+
+        deadzone_corrected_axes = [a * (abs(a) > AXES_DEADZONE) for a in msg.axes]
         force = (
-            msg.axes[1],
-            -msg.axes[0],
+            deadzone_corrected_axes[1]
+            -deadzone_corrected_axes[0],
             1.0 if msg.buttons[12] == 1 else (-1.0 if msg.buttons[13] == 1 else 0.0),
         )
         wrench.force = Vector3()
@@ -34,8 +37,8 @@ class JoystickToWrench(Node):
             setattr(wrench.force, axis, value * MAX_FORCE)
 
         torque = [
-            -msg.axes[2],
-            msg.axes[3],
+            -deadzone_corrected_axes[2],
+            deadzone_corrected_axes[3],
             -1.0 if msg.buttons[4] == 1 else (1.0 if msg.buttons[5] == 1 else 0.0),
         ]
         wrench.torque = Vector3()
