@@ -5,13 +5,14 @@ from rclpy.node import Node
 from sensor_msgs.msg import Joy
 
 AXES_DEADZONE = 0.025
-MAX_FORCE = 4
-MAX_TORQUE = 4
-
 
 class JoystickToWrench(Node):
     def __init__(self):
         super().__init__("joystick_to_wrench")
+        
+        self.declare_parameter("max_force", 4.0)
+        self.declare_parameter("max_torque", 4.0)
+
         self.joy_subscription = self.create_subscription(
             Joy, "joy", self.joy_subscriber_callback, 10
         )
@@ -24,17 +25,20 @@ class JoystickToWrench(Node):
             self.get_logger().warning("malformatted joy message")
             return
 
+        max_force = self.get_parameter("max_force").value
+        max_torque = self.get_parameter("max_torque").value
+
         wrench = Wrench()
 
         deadzone_corrected_axes = [a * (abs(a) > AXES_DEADZONE) for a in msg.axes]
         force = (
-            deadzone_corrected_axes[1]
+            deadzone_corrected_axes[1],
             -deadzone_corrected_axes[0],
             1.0 if msg.buttons[12] == 1 else (-1.0 if msg.buttons[13] == 1 else 0.0),
         )
         wrench.force = Vector3()
         for axis, value in zip(("x", "y", "z"), force):
-            setattr(wrench.force, axis, value * MAX_FORCE)
+            setattr(wrench.force, axis, value * max_force)
 
         torque = [
             -deadzone_corrected_axes[2],
@@ -43,7 +47,7 @@ class JoystickToWrench(Node):
         ]
         wrench.torque = Vector3()
         for axis, value in zip(("x", "y", "z"), torque):
-            setattr(wrench.torque, axis, value * MAX_TORQUE)
+            setattr(wrench.torque, axis, value * max_torque)
 
         self.wrench_publisher.publish(wrench)
 
