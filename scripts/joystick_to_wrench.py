@@ -43,7 +43,7 @@ class JoystickToWrench(Node):
         torque = [
             -deadzone_corrected_axes[2],
             deadzone_corrected_axes[3],
-            -1.0 if msg.buttons[4] == 1 else (1.0 if msg.buttons[5] == 1 else 0.0),
+            1.0 if msg.buttons[4] == 1 else (-1.0 if msg.buttons[5] == 1 else 0.0),
         ]
         wrench.torque = Vector3()
         for axis, value in zip(("x", "y", "z"), torque):
