@@ -33,7 +33,7 @@ class JoystickToWrench(Node):
         deadzone_corrected_axes = [a * (abs(a) > AXES_DEADZONE) for a in msg.axes]
         force = (
             deadzone_corrected_axes[1],
-            -deadzone_corrected_axes[0],
+            deadzone_corrected_axes[0],
             1.0 if msg.buttons[12] == 1 else (-1.0 if msg.buttons[13] == 1 else 0.0),
         )
         wrench.force = Vector3()
